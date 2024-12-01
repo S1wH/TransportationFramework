@@ -3,11 +3,11 @@ from .utils import delete_roots
 
 
 class TransportTable:
-    def __init__(self, suppliers_amount: int, consumers_amount: int, suppliers: list[float | int],
-                 consumers: list[float | int], price_matrix: list[list[float | int]]):
-        self.__validate_table(suppliers_amount, consumers_amount, suppliers, consumers, price_matrix)
-        self.__suppliers_amount = suppliers_amount
-        self.__consumers_amount = consumers_amount
+    def __init__(self, suppliers: list[float | int], consumers: list[float | int],
+                 price_matrix: list[list[float | int]]):
+        self.__validate_table(suppliers, consumers, price_matrix)
+        self.__suppliers_amount = len(suppliers)
+        self.__consumers_amount = len(consumers)
         self.__suppliers = suppliers
         self.__consumers = consumers
         self.__price_dict = {}
@@ -49,14 +49,8 @@ class TransportTable:
     def check_table_balance(self) -> bool:
         return sum(self.suppliers) == sum(self.consumers)
 
-    def __validate_table(self, suppliers_amount: int, consumers_amount: int, suppliers: list[float | int],
-                         consumers: list[float | int], price_matrix: list[list[float | int]]) -> None:
-        if suppliers_amount != len(suppliers):
-            raise MatrixDimensionError(suppliers_amount, len(suppliers))
-        if suppliers_amount != len(price_matrix):
-            raise MatrixDimensionError(suppliers_amount, len(price_matrix))
-        if consumers_amount != len(consumers):
-            raise MatrixDimensionError(consumers_amount, len(consumers))
+    def __validate_table(self, suppliers: list[float | int], consumers: list[float | int],
+                         price_matrix: list[list[float | int]]) -> None:
         for supplier_id, supplier in enumerate(suppliers):
             if not isinstance(supplier, (int, float)) or supplier <= 0:
                 raise InvalidAmountGood(supplier, 0, supplier_id)
@@ -64,8 +58,8 @@ class TransportTable:
             if not isinstance(consumer, (int, float)) or consumer <= 0:
                 raise InvalidAmountGood(consumer, 1, consumer_id)
         for supplier_id, prices in enumerate(price_matrix, 1):
-            if len(prices) != consumers_amount:
-                raise MatrixDimensionError(consumers_amount, len(prices))
+            if len(prices) != len(consumers):
+                raise MatrixDimensionError(len(consumers), len(prices))
             for consumer_id, price in enumerate(prices, 1):
                 if not isinstance(price, (int, float)) or price < 0:
                     raise InvalidPriceValueError(price, (supplier_id, consumer_id))
@@ -77,7 +71,7 @@ class TransportTable:
         if total_suppliers_goods > total_consumers_goods:
             self.__consumers_amount += 1
             self.__consumers.append(abs_difference)
-            for idx, supplier in enumerate(self.__price_matrix):
+            for idx, _ in enumerate(self.__price_matrix):
                 self.__price_matrix[idx].append(0)
         else:
             self.__suppliers_amount += 1
@@ -135,6 +129,7 @@ class TransportTable:
     def create_basic_plan(self, mode: int=1):
         if self.check_table_balance() is False:
             self.__make_table_balanced()
+        basic_plan = None
         if mode == 1:
             basic_plan = self.__north_western_method()
         elif mode == 2:
