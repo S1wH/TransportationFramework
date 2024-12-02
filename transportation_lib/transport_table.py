@@ -1,5 +1,6 @@
+import operator
 from .transport_errors import MatrixDimensionError, InvalidPriceValueError, InvalidAmountGood
-from .utils import delete_roots
+from .utils import find_line_penalty, update_root_values
 
 
 class TransportTable:
@@ -84,11 +85,11 @@ class TransportTable:
         cur_consumer = self.consumers[consumer_id]
         supplier_id = 0
         cur_supplier = self.suppliers[supplier_id]
-        price = 0
+        cost = 0
         while consumer_id != self.__consumers_amount or supplier_id != self.__suppliers_amount:
             good_amount = min(cur_consumer, cur_supplier)
             solution[supplier_id][consumer_id] = good_amount
-            price += self.price_matrix[supplier_id][consumer_id] * good_amount
+            cost += self.price_matrix[supplier_id][consumer_id] * good_amount
             if cur_consumer < cur_supplier:
                 cur_supplier -= good_amount
                 consumer_id += 1
@@ -102,29 +103,67 @@ class TransportTable:
                 consumer_id += 1
                 cur_consumer = self.consumers[consumer_id] if consumer_id != self.__consumers_amount else None
                 cur_supplier = self.suppliers[supplier_id] if supplier_id != self.__suppliers_amount else None
-        return solution, price
+        return solution, cost
 
     def __minimum_cost_method(self) -> tuple[list[list[float | int]], int | float]:
         suppliers = self.suppliers.copy()
         consumers = self.consumers.copy()
         solution = [[0] * self.__consumers_amount for _ in range(self.__suppliers_amount)]
         counter = 0
-        price = 0
+        cost = 0
         price_dict = sorted(self.__price_dict.items(), key=lambda x: x[1])
         while counter != self.__consumers_amount + self.__suppliers_amount - 1:
             min_cell_supplier = price_dict[0][0][0]
             min_cell_consumer = price_dict[0][0][1]
-            good_amount = min(suppliers[min_cell_supplier], consumers[min_cell_consumer])
-            price += price_dict[0][1] * good_amount
-            if suppliers[min_cell_supplier] > consumers[min_cell_consumer]:
-                suppliers[min_cell_supplier] -= good_amount
-                price_dict = delete_roots(price_dict, 1, min_cell_consumer)
-            elif suppliers[min_cell_supplier] < consumers[min_cell_consumer]:
-                consumers[min_cell_consumer] -= good_amount
-                delete_roots(price_dict, 0, min_cell_supplier)
+            price, good_amount = update_root_values(suppliers, consumers, min_cell_consumer, min_cell_supplier,
+                                                    price_dict, solution)
+            cost += price
             solution[min_cell_supplier][min_cell_consumer] = good_amount
             counter += 1
-        return solution, price
+        return solution, cost
+
+    def __fogel_method(self) -> tuple[list[list[float | int]], int | float]:
+        solution = [[0] * self.__consumers_amount for _ in range(self.__suppliers_amount)]
+        cost = 0
+        counter = 0
+        suppliers = self.suppliers.copy()
+        consumers = self.consumers.copy()
+        suppliers_list = list(self.price_matrix)
+        consumers_list = [list(consumer_column) for consumer_column in zip(*self.price_matrix)]
+        baned_suppliers = []
+        baned_consumers = []
+        while counter != self.__consumers_amount + self.__suppliers_amount - 1:
+            suppliers_penalties = {supplier: find_line_penalty(prices.copy(), baned_consumers) for supplier, prices
+                                   in enumerate(suppliers_list.copy()) if supplier not in baned_suppliers}
+            consumers_penalties = {consumer: find_line_penalty(prices.copy(), baned_suppliers) for consumer, prices
+                                   in enumerate(consumers_list.copy()) if consumer not in baned_consumers}
+            max_supplier_penalty = max(suppliers_penalties.items(), key=operator.itemgetter(1))
+            max_consumer_penalty = max(consumers_penalties.items(), key=operator.itemgetter(1))
+            consumer_idx = 0
+            supplier_idx = 0
+
+            if max_supplier_penalty[1] > max_consumer_penalty[1]:
+                supplier_idx = max_supplier_penalty[0]
+                consumer_idx = suppliers_list[supplier_idx].index(
+                    min(item for idx, item in enumerate(suppliers_list[supplier_idx]) if idx not in baned_consumers))
+            elif max_supplier_penalty[1] <= max_consumer_penalty[1]:
+                consumer_idx = max_consumer_penalty[0]
+                supplier_idx = consumers_list[consumer_idx].index(
+                    min(item for idx, item in enumerate(consumers_list[consumer_idx]) if idx not in baned_suppliers))
+
+            goods_amount = min(suppliers[supplier_idx], consumers[consumer_idx])
+            price = suppliers_list[supplier_idx][consumer_idx] * goods_amount
+            if suppliers[supplier_idx] > consumers[consumer_idx]:
+                baned_consumers.append(consumer_idx)
+                suppliers[supplier_idx] -= goods_amount
+            elif suppliers[supplier_idx] < consumers[consumer_idx]:
+                baned_suppliers.append(supplier_idx)
+                consumers[consumer_idx] -= goods_amount
+            cost += price
+            solution[supplier_idx][consumer_idx] = goods_amount
+            # TODO: epsilon modified version
+            counter += 1
+        return solution, cost
 
     def create_basic_plan(self, mode: int=1):
         if self.check_table_balance() is False:
@@ -134,6 +173,8 @@ class TransportTable:
             basic_plan = self.__north_western_method()
         elif mode == 2:
             basic_plan = self.__minimum_cost_method()
+        elif mode == 3:
+            basic_plan = self.__fogel_method()
         return basic_plan
 
 
