@@ -28,4 +28,5 @@ class InvalidAmountGood(Exception):
         self.__position = position
 
     def __str__(self):
-        return f'{self.__good_type} {self.__position} обладает некорректной потребностью/запасом продукта {self.__amount}'
+        return (f'{self.__good_type} {self.__position}'
+                f' обладает некорректной потребностью/запасом продукта {self.__amount}')
