@@ -1,55 +1,166 @@
 import operator
+from typing import Optional
+from abc import ABC
+import numpy as np
+from numpy import typing as npt
+from prettytable import PrettyTable
 from .transport_errors import MatrixDimensionError, InvalidPriceValueError, InvalidAmountGood
-from .utils import find_line_penalty, update_root_values
+from .utils import create_eps_expression, root_validation
+
+
+class Participant(ABC):
+    def __init__(self, goods_amount: int | float, obj_id: int, epsilon: int = 0) -> None:
+        self.goods_amount = goods_amount
+        self.real_amount = goods_amount
+        self.epsilon = epsilon
+        self.real_epsilon = epsilon
+        self.id = obj_id
+
+    def __lt__(self, other) -> bool:
+        if isinstance(other, Participant):
+            return self.goods_amount < other.goods_amount
+        return self.goods_amount < other
+
+    def __le__(self, other) -> bool:
+        if isinstance(other, Participant):
+            return self.goods_amount <= other.goods_amount
+        return self.goods_amount <= other
+
+    def __gt__(self, other) -> bool:
+        if isinstance(other, Participant):
+            return self.goods_amount > other.goods_amount
+        return self.goods_amount > other
+
+    def __ge__(self, other) -> bool:
+        if isinstance(other, Participant):
+            return self.goods_amount >= other.goods_amount
+        return self.goods_amount >= other
+
+    def __eq__(self, other) -> bool:
+        if isinstance(other, Participant):
+            return self.goods_amount == other.goods_amount
+        return self.goods_amount == other
+
+
+class Consumer(Participant):
+    pass
+
+
+class Supplier(Participant):
+    pass
+
+
+class Root:
+    def __init__(self, price: int | float, supplier: Supplier, consumer: Consumer, epsilon: int=None) -> None:
+        self.price = price
+        self.epsilon = epsilon
+        self.supplier = supplier
+        self.consumer = consumer
+
+    def __lt__(self, other):
+        return self.price < other.price
+
+    def __le__(self, other):
+        return self.price < other.price
+
+    def __gt__(self, other):
+        return self.price > other.price
+
+    def __ge__(self, other):
+        return self.price >= other.price
+
+    def __eq__(self, other):
+        return self.price == other.price
+
+
+def find_line_penalty(line: npt.NDArray[Root]) -> int | float:
+    filtered_array = np.fromiter((root for root in line
+                                  if root_validation(root.consumer.goods_amount, root.supplier.goods_amount,
+                                                     root.consumer.epsilon, root.supplier.epsilon)), dtype=line.dtype)
+    if len(filtered_array) == 0:
+        return 0
+    filtered_array.sort()
+    if len(filtered_array) > 1:
+        return abs(filtered_array[0].price - filtered_array[1].price)
+    return filtered_array[0].price
+
+
+def get_min_line_element(line: npt.NDArray[Root]) -> tuple[int | None, int | None]:
+    copied_matrix = line.copy()
+    copied_matrix.sort()
+    for root in copied_matrix:
+        if root_validation(root.consumer.goods_amount, root.supplier.goods_amount, root.consumer.epsilon,
+                           root.supplier.epsilon):
+            return root.supplier.id, root.consumer.id
+    return None, None
 
 
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
-                 price_matrix: list[list[float | int]]):
+                 price_matrix: list[list[float | int]]) -> None:
         self.__validate_table(suppliers, consumers, price_matrix)
+
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
-        self.__suppliers = suppliers
-        self.__consumers = consumers
-        self.__price_dict = {}
-        self.__price_matrix = price_matrix
+        self.__suppliers = np.array([Supplier(supplier, supplier_id)
+                                     for supplier_id, supplier in enumerate(suppliers)], dtype=Supplier)
+        self.__consumers = np.array([Consumer(consumer, consumer_id)
+                                     for consumer_id, consumer in enumerate(consumers)], dtype=Consumer)
+        self.__price_matrix = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id, prices in enumerate(price_matrix):
             for consumer_id, price in enumerate(prices):
-                self.__price_dict[(supplier_id, consumer_id)] = price
-        self.__solution = [[0] * self.__consumers_amount for _ in range(self.__suppliers_amount)]
+                supplier = self.__suppliers[supplier_id]
+                consumer = self.__consumers[consumer_id]
+                self.__price_matrix[supplier_id][consumer_id] = Root(price, supplier, consumer)
+        self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=str)
 
     def pprint(self) -> None:
-        print('', end='\t')
-        for i in range(len(self.price_matrix[0])):
-            print(f'T{i + 1}', end='\t')
-        print('A')
-        for i in range(len(self.price_matrix)):
-            print(f'S{i + 1}', end='\t')
-            for j in range(len(self.price_matrix[i])):
-                print(self.price_matrix[i][j], end='\t')
-            print(self.suppliers[i])
-        print('B', end='\t')
-        for i in range(len(self.consumers)):
-            print(self.consumers[i], end='\t')
-        print('\n')
+        table = PrettyTable([''] + [f'T{i + 1}' for i in range(self.price_matrix[0].size)] + ['A'])
+        for i in range(self.price_matrix.shape[0]):
+            row = [f'S{i + 1}']
+            for j in range(self.price_matrix[i].size):
+                row.append(self.price_matrix[i][j].price)
+            row.append(create_eps_expression(self.suppliers[i].real_epsilon, self.suppliers[i].real_amount))
+            table.add_row(row)
+        row = ['B']
+        for i in range(self.consumers.size):
+            row.append(create_eps_expression(self.consumers[i].real_epsilon, self.consumers[i].real_amount))
+        row.append('')
+        table.add_row(row)
+        print(table)
 
-    def pprint_res(self, solution: list[list[int | float]]) -> None:
-        print('', end='\t')
-        for i in range(len(self.price_matrix[0])):
-            print(f'T{i + 1}', end='\t')
-        print('A')
+    def pprint_res(self, solution: npt.NDArray[npt.NDArray[np.float64]]) -> None:
+        table = PrettyTable([''] + [f'T{i + 1}' for i in range(self.price_matrix[0].size)] + ['A'])
         for i in range(len(solution)):
-            print(f'S{i + 1}', end='\t')
+            row = [f'S{i + 1}']
             for j in range(len(solution[i])):
-                print(solution[i][j], end='\t')
-            print(self.suppliers[i])
-        print('B', end='\t')
-        for i in range(len(self.consumers)):
-            print(self.consumers[i], end='\t')
-        print('\n')
+                row.append(solution[i][j])
+            row.append(create_eps_expression(self.suppliers[i].real_epsilon, self.suppliers[i].real_amount))
+            table.add_row(row)
+        row = ['B']
+        for i in range(self.consumers.size):
+            row.append(create_eps_expression(self.consumers[i].real_epsilon, self.consumers[i].real_amount))
+        row.append('')
+        table.add_row(row)
+        print(table)
 
     def check_table_balance(self) -> bool:
-        return sum(self.suppliers) == sum(self.consumers)
+        goods = np.vectorize(lambda x: x.goods_amount)
+        return np.sum(goods(self.suppliers)) == np.sum(goods(self.consumers))
+
+    def __restore_price_matrix_values(self) -> None:
+        for supplier in self.suppliers:
+            supplier.goods_amount = supplier.real_amount
+        for consumer in self.consumers:
+            consumer.goods_amount = consumer.real_amount
+
+    def __get_min_valid_root(self) -> Optional[Root]:
+        reshaped_matrix = self.price_matrix.copy().reshape(-1)
+        reshaped_matrix.sort()
+        for root in reshaped_matrix:
+            if root_validation(root.consumer.goods_amount, root.supplier.goods_amount, root.consumer.epsilon,
+                               root.supplier.epsilon):
+                return root
 
     def __validate_table(self, suppliers: list[float | int], consumers: list[float | int],
                          price_matrix: list[list[float | int]]) -> None:
@@ -67,103 +178,140 @@ class TransportTable:
                     raise InvalidPriceValueError(price, (supplier_id, consumer_id))
 
     def __make_table_balanced(self) -> None:
-        total_suppliers_goods = sum(self.suppliers)
-        total_consumers_goods = sum(self.consumers)
+        goods = np.vectorize(lambda x: x.goods_amount)
+        total_suppliers_goods = np.sum(goods(self.suppliers))
+        total_consumers_goods = np.sum(goods(self.consumers))
         abs_difference = abs(total_suppliers_goods - total_consumers_goods)
         if total_suppliers_goods > total_consumers_goods:
             self.__consumers_amount += 1
-            self.__consumers.append(abs_difference)
-            for idx, _ in enumerate(self.__price_matrix):
-                self.__price_matrix[idx].append(0)
+            new_consumer = Consumer(abs_difference, self.__consumers_amount - 1)
+            self.__consumers = np.append(self.__consumers, new_consumer)
+            new_line = np.empty((self.__suppliers_amount, 1), dtype=Root)
+            for i in range(self.__suppliers_amount):
+                new_line[i][0] = Root(0, self.suppliers[i], new_consumer)
+            self.__price_matrix = np.concatenate((self.__price_matrix, new_line), axis=1)
         else:
             self.__suppliers_amount += 1
-            self.__suppliers.append(abs_difference)
-            self.__price_matrix.append([0] * self.__consumers_amount)
+            new_supplier = Supplier(abs_difference,  self.__suppliers_amount - 1)
+            self.__suppliers = np.append(self.__suppliers, new_supplier)
+            new_line = np.empty((1, self.__consumers_amount), dtype=Root)
+            for i in range(self.__suppliers_amount):
+                new_line[0][i] = Root(0, self.suppliers[i], new_supplier)
+            self.__price_matrix = np.concatenate((self.price_matrix, new_line), axis=0)
 
-    def __north_western_method(self) -> tuple[list[list[float | int]], int | float]:
-        solution = [[0] * self.__consumers_amount for _ in range(self.__suppliers_amount)]
+    def __epsilon_modify_table(self) -> None:
+        for supplier in self.suppliers:
+            supplier.epsilon = 1
+            supplier.real_epsilon = 1
+        self.consumers[-1].epsilon = self.__suppliers_amount
+        self.consumers[-1].real_epsilon = self.__suppliers_amount
+
+    def __north_western_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+        self.__solution = np.full((self.__suppliers_amount, self.__consumers_amount), '0', dtype='U10')
         consumer_id = 0
-        cur_consumer = self.consumers[consumer_id]
         supplier_id = 0
-        cur_supplier = self.suppliers[supplier_id]
         cost = 0
         while consumer_id != self.__consumers_amount or supplier_id != self.__suppliers_amount:
-            good_amount = min(cur_consumer, cur_supplier)
-            solution[supplier_id][consumer_id] = good_amount
-            cost += self.price_matrix[supplier_id][consumer_id] * good_amount
-            if cur_consumer < cur_supplier:
-                cur_supplier -= good_amount
-                consumer_id += 1
-                cur_consumer = self.consumers[consumer_id]
-            elif cur_consumer > cur_supplier:
-                cur_consumer -= good_amount
-                supplier_id += 1
-                cur_supplier = self.suppliers[supplier_id]
-            else:
-                supplier_id += 1
-                consumer_id += 1
-                cur_consumer = self.consumers[consumer_id] if consumer_id != self.__consumers_amount else None
-                cur_supplier = self.suppliers[supplier_id] if supplier_id != self.__suppliers_amount else None
-        return solution, cost
+            root = self.price_matrix[supplier_id][consumer_id]
+            min_participant = min(root.consumer, root.supplier)
+            goods_amount = min_participant.goods_amount
+            eps = min_participant.epsilon
+            self.__solution[supplier_id][consumer_id] = create_eps_expression(eps, goods_amount)
+            cost += root.price * goods_amount
 
-    def __minimum_cost_method(self) -> tuple[list[list[float | int]], int | float]:
-        suppliers = self.suppliers.copy()
-        consumers = self.consumers.copy()
-        counter = 0
-        cost = 0
-        price_dict = sorted(self.__price_dict.copy().items(), key=lambda x: x[1])
-        while counter != self.__consumers_amount + self.__suppliers_amount - 1:
-            min_cell_supplier = price_dict[0][0][0]
-            min_cell_consumer = price_dict[0][0][1]
-            price, good_amount = update_root_values(suppliers, consumers, price_dict, self.__solution)
-            cost += price
-            self.__solution[min_cell_supplier][min_cell_consumer] = good_amount
-            counter += 1
+            if (root.consumer < root.supplier or
+                    (root.consumer.epsilon < root.supplier.epsilon and root.consumer == root.supplier)):
+                root.supplier.goods_amount -= goods_amount
+                root.supplier.epsilon -= eps
+                consumer_id += 1
+            elif (root.consumer > root.supplier or
+                  (root.consumer.epsilon > root.supplier.epsilon and root.consumer == root.supplier)):
+                root.consumer.goods_amount -= goods_amount
+                root.consumer.epsilon -= eps
+                supplier_id += 1
+            else:
+                if supplier_id == self.__suppliers_amount - 1 and consumer_id == self.__consumers_amount - 1:
+                    break
+                self.__restore_price_matrix_values()
+                self.__epsilon_modify_table()
+                return self.__north_western_method()
+        self.__restore_price_matrix_values()
         return self.__solution, cost
 
-    def __fogel_method(self) -> tuple[list[list[float | int]], int | float]:
+    def __minimum_cost_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+        self.__solution = np.full((self.__suppliers_amount, self.__consumers_amount), '0', dtype='U10')
+        counter = 0
+        cost = 0
+        while counter != self.__consumers_amount + self.__suppliers_amount - 1:
+            root = self.__get_min_valid_root()
+            if not root:
+                self.__restore_price_matrix_values()
+                self.__epsilon_modify_table()
+                return self.__minimum_cost_method()
+            min_participant = min(root.consumer, root.supplier)
+            goods_amount = min_participant.goods_amount
+            eps = min_participant.epsilon
+            cost += root.price * goods_amount
+
+            root.supplier.goods_amount -= goods_amount
+            root.consumer.goods_amount -= goods_amount
+            if root.consumer == root.supplier:
+                eps = min(root.consumer.epsilon, root.supplier.epsilon)
+            root.supplier.epsilon -= eps
+            root.consumer.epsilon -= eps
+
+            self.__solution[root.supplier.id][root.consumer.id] = create_eps_expression(eps, goods_amount)
+            counter += 1
+        self.__restore_price_matrix_values()
+        return self.__solution, cost
+
+    def __fogel_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+        self.__solution = np.full((self.__suppliers_amount, self.__consumers_amount), '0', dtype='U10')
         cost = 0
         counter = 0
-        suppliers = self.suppliers.copy()
-        consumers = self.consumers.copy()
-        suppliers_list = list(self.price_matrix)
-        consumers_list = [list(consumer_column) for consumer_column in zip(*self.price_matrix)]
-        baned_suppliers = []
-        baned_consumers = []
         while counter != self.__consumers_amount + self.__suppliers_amount - 1:
-            suppliers_penalties = {supplier: find_line_penalty(prices.copy(), baned_consumers) for supplier, prices
-                                   in enumerate(suppliers_list.copy()) if supplier not in baned_suppliers}
-            consumers_penalties = {consumer: find_line_penalty(prices.copy(), baned_suppliers) for consumer, prices
-                                   in enumerate(consumers_list.copy()) if consumer not in baned_consumers}
+            suppliers_penalties = {supplier_id: find_line_penalty(supplier)
+                                   for supplier_id, supplier in enumerate(self.price_matrix)}
+            consumers_penalties = {consumer_id: find_line_penalty(consumer)
+                                   for consumer_id, consumer in enumerate(self.price_matrix.T)}
             max_supplier_penalty = max(suppliers_penalties.items(), key=operator.itemgetter(1))
             max_consumer_penalty = max(consumers_penalties.items(), key=operator.itemgetter(1))
 
-            consumer_idx = 0
-            supplier_idx = 0
+            consumer_id = 0
+            supplier_id = 0
             if max_supplier_penalty[1] > max_consumer_penalty[1]:
-                supplier_idx = max_supplier_penalty[0]
-                consumer_idx = suppliers_list[supplier_idx].index(
-                    min(item for idx, item in enumerate(suppliers_list[supplier_idx]) if idx not in baned_consumers))
+                supplier_id = max_supplier_penalty[0]
+                _, consumer_id = get_min_line_element(self.price_matrix[supplier_id, :])
             elif max_supplier_penalty[1] <= max_consumer_penalty[1]:
-                consumer_idx = max_consumer_penalty[0]
-                supplier_idx = consumers_list[consumer_idx].index(
-                    min(item for idx, item in enumerate(consumers_list[consumer_idx]) if idx not in baned_suppliers))
+                consumer_id = max_consumer_penalty[0]
+                supplier_id, _ = get_min_line_element(self.price_matrix[:, consumer_id])
 
-            goods_amount = min(suppliers[supplier_idx], consumers[consumer_idx])
-            cost += suppliers_list[supplier_idx][consumer_idx] * goods_amount
-            if suppliers[supplier_idx] > consumers[consumer_idx]:
-                baned_consumers.append(consumer_idx)
-                suppliers[supplier_idx] -= goods_amount
-            elif suppliers[supplier_idx] < consumers[consumer_idx]:
-                baned_suppliers.append(supplier_idx)
-                consumers[consumer_idx] -= goods_amount
-            self.__solution[supplier_idx][consumer_idx] = goods_amount
-            # TODO: epsilon modified version
+            if consumer_id is None or supplier_id is None:
+                self.__restore_price_matrix_values()
+                self.__epsilon_modify_table()
+                return self.__fogel_method()
+
+            root = self.price_matrix[supplier_id][consumer_id]
+            min_participant = min(root.consumer, root.supplier)
+            goods_amount = min_participant.goods_amount
+            eps = min_participant.epsilon
+            cost += root.price * goods_amount
+
+            root.supplier.goods_amount -= goods_amount
+            root.consumer.goods_amount -= goods_amount
+            if root.consumer == root.supplier:
+                eps = min(root.consumer.epsilon, root.supplier.epsilon)
+            root.supplier.epsilon -= eps
+            root.consumer.epsilon -= eps
+
+            self.__solution[supplier_id][consumer_id] = create_eps_expression(eps, goods_amount)
             counter += 1
+        self.__restore_price_matrix_values()
         return self.__solution, cost
 
     def create_basic_plan(self, mode: int=1):
-        if self.check_table_balance() is False:
+        res = self.check_table_balance()
+        if not res:
             self.__make_table_balanced()
         basic_plan = None
         if mode == 1:
