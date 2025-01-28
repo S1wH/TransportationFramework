@@ -1,11 +1,9 @@
 import operator
 from typing import Optional
 from abc import ABC
-import numpy as np
-from numpy import typing as npt
 from prettytable import PrettyTable
 from .transport_errors import MatrixDimensionError, InvalidPriceValueError, InvalidAmountGood
-from .utils import create_eps_expression, root_validation
+from .utils import *
 
 
 class Participant(ABC):
@@ -73,32 +71,9 @@ class Root:
         return self.price == other.price
 
 
-def find_line_penalty(line: npt.NDArray[Root]) -> int | float:
-    filtered_array = np.fromiter((root for root in line
-                                  if root_validation(root.consumer.goods_amount, root.supplier.goods_amount,
-                                                     root.consumer.epsilon, root.supplier.epsilon)), dtype=line.dtype)
-    if len(filtered_array) == 0:
-        return 0
-    filtered_array.sort()
-    if len(filtered_array) > 1:
-        return abs(filtered_array[0].price - filtered_array[1].price)
-    return filtered_array[0].price
-
-
-def get_min_line_element(line: npt.NDArray[Root]) -> tuple[int | None, int | None]:
-    copied_matrix = line.copy()
-    copied_matrix.sort()
-    for root in copied_matrix:
-        if root_validation(root.consumer.goods_amount, root.supplier.goods_amount, root.consumer.epsilon,
-                           root.supplier.epsilon):
-            return root.supplier.id, root.consumer.id
-    return None, None
-
-
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
                  price_matrix: list[list[float | int]]) -> None:
-        self.__validate_table(suppliers, consumers, price_matrix)
 
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
@@ -112,6 +87,8 @@ class TransportTable:
                 supplier = self.__suppliers[supplier_id]
                 consumer = self.__consumers[consumer_id]
                 self.__price_matrix[supplier_id][consumer_id] = Root(price, supplier, consumer)
+
+        self.__validate_table()
         self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=str)
 
     def pprint(self) -> None:
@@ -162,20 +139,19 @@ class TransportTable:
                                root.supplier.epsilon):
                 return root
 
-    def __validate_table(self, suppliers: list[float | int], consumers: list[float | int],
-                         price_matrix: list[list[float | int]]) -> None:
-        for supplier_id, supplier in enumerate(suppliers):
-            if not isinstance(supplier, (int, float)) or supplier <= 0:
+    def __validate_table(self) -> None:
+        for supplier_id, supplier in enumerate(self.suppliers):
+            if not isinstance(supplier.goods_amount, (int, float)) or supplier <= 0:
                 raise InvalidAmountGood(supplier, 0, supplier_id)
-        for consumer_id, consumer in enumerate(consumers):
-            if not isinstance(consumer, (int, float)) or consumer <= 0:
+        for consumer_id, consumer in enumerate(self.consumers):
+            if not isinstance(consumer.goods_amount, (int, float)) or consumer <= 0:
                 raise InvalidAmountGood(consumer, 1, consumer_id)
-        for supplier_id, prices in enumerate(price_matrix, 1):
-            if len(prices) != len(consumers):
-                raise MatrixDimensionError(len(consumers), len(prices))
-            for consumer_id, price in enumerate(prices, 1):
-                if not isinstance(price, (int, float)) or price < 0:
-                    raise InvalidPriceValueError(price, (supplier_id, consumer_id))
+        for supplier_id, prices in enumerate(self.price_matrix, 1):
+            if len(prices) != self.__consumers_amount:
+                raise MatrixDimensionError(self.__consumers_amount, len(prices))
+            for consumer_id, root in enumerate(prices, 1):
+                if not isinstance(root.price, (int, float)) or root.price < 0:
+                    raise InvalidPriceValueError(root.price, (supplier_id, consumer_id))
 
     def __make_table_balanced(self) -> None:
         goods = np.vectorize(lambda x: x.goods_amount)
