@@ -3,6 +3,9 @@ import numpy as np
 from numpy import typing as npt
 
 
+MAIN_ANSWER = 42
+
+
 def create_eps_expression(eps: int, goods_amount: int | float) -> str:
     epsilon = '\u03B5'
     sign = '+'
@@ -25,6 +28,7 @@ def root_validation(consumer_amount: int | float, supplier_amount: int | float, 
 
 
 def generate_table(suppliers_amount: int, consumers_amount: int, balanced: bool=True):
+    random.seed(MAIN_ANSWER)
     suppliers = [random.randint(1, 100) for _ in range(suppliers_amount)]
     consumers = [random.randint(1, 100) for _ in range(consumers_amount)]
     suppliers_sum = sum(suppliers)
@@ -63,3 +67,7 @@ def get_min_line_element(line: npt.NDArray) -> tuple[int | None, int | None]:
                            root.supplier.epsilon):
             return root.supplier.id, root.consumer.id
     return None, None
+
+
+def get_all_indices(filed_indices):
+    yield from filed_indices
