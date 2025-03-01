@@ -7,6 +7,8 @@ MAIN_ANSWER = 42
 
 
 def create_eps_expression(eps: int, goods_amount: int | float) -> str:
+    if eps == 0:
+        return str(goods_amount)
     epsilon = '\u03B5'
     sign = '+'
     if eps < 0:
