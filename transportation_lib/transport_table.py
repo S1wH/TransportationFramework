@@ -1,15 +1,17 @@
 import operator
 import copy
+import sys
 from collections import deque
 from typing import Optional
 from abc import ABC
 from prettytable import PrettyTable
-from .transport_errors import MatrixDimensionError, InvalidPriceValueError, InvalidAmountGood
+from .transport_errors import (MatrixDimensionError, InvalidPriceValueError, InvalidAmountGood,
+                               InvalidRestrictionValue, InvalidRestrictionIndices, InvalidRestrictionSymbol)
 from .utils import *
 
 
 class Participant(ABC):
-    def __init__(self, goods_amount: int | float, obj_id: int, epsilon: int = 0) -> None:
+    def __init__(self, goods_amount: int | float, obj_id: int, epsilon: int=0) -> None:
         self.goods_amount = goods_amount
         self.real_amount = goods_amount
         self.epsilon = epsilon
@@ -51,13 +53,14 @@ class Supplier(Participant):
 
 
 class Root:
-    def __init__(self, price: int | float, supplier: Supplier, consumer: Consumer) -> None:
+    def __init__(self, price: int | float, supplier: Supplier, consumer: Consumer, amount=0, epsilon=0,
+                 representation='0') -> None:
         self.price = price
-        self.epsilon = 0
-        self.amount = 0
+        self.epsilon = epsilon
+        self.amount = amount
         self.supplier = supplier
         self.consumer = consumer
-        self.repr = '0'
+        self.repr = representation
 
     def __lt__(self, other):
         return self.price < other.price
@@ -77,19 +80,20 @@ class Root:
         return self.price == other.price
 
     def __copy__(self):
-        return Root(self.price, self.supplier, self.consumer)
+        return Root(self.price, self.supplier, self.consumer, self.amount, self.epsilon, self.repr)
 
 
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
-                 price_matrix: list[list[float | int]]) -> None:
-
+                 price_matrix: list[list[float | int]], restrictions: dict[tuple[int, int], tuple[str, int]]=None
+                 ) -> None:
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
         self.__suppliers = np.array([Supplier(supplier, supplier_id)
                                      for supplier_id, supplier in enumerate(suppliers)], dtype=Supplier)
         self.__consumers = np.array([Consumer(consumer, consumer_id)
                                      for consumer_id, consumer in enumerate(consumers)], dtype=Consumer)
+        self.__restrictions = restrictions
         self.__price_matrix = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id, prices in enumerate(price_matrix):
             for consumer_id, price in enumerate(prices):
@@ -98,15 +102,15 @@ class TransportTable:
                 self.__price_matrix[supplier_id][consumer_id] = Root(price, supplier, consumer)
 
         self.__validate_table()
-        self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=str)
-        # self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount))
+        self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
+        self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount))
 
     def pprint(self) -> None:
         table = PrettyTable([''] + [f'T{i + 1}' for i in range(self.price_matrix[0].size)] + ['A'])
         for i in range(self.price_matrix.shape[0]):
             row = [f'S{i + 1}']
             for j in range(self.price_matrix[i].size):
-                row.append(self.price_matrix[i][j].price)
+                row.append(self.price_matrix[i][j].price if self.price_matrix[i][j].price != sys.maxsize else 'M')
             row.append(create_eps_expression(self.suppliers[i].real_epsilon, self.suppliers[i].real_amount))
             table.add_row(row)
         row = ['B']
@@ -153,15 +157,29 @@ class TransportTable:
         for supplier_id, supplier in enumerate(self.suppliers):
             if not isinstance(supplier.goods_amount, (int, float)) or supplier <= 0:
                 raise InvalidAmountGood(supplier, 0, supplier_id)
+
         for consumer_id, consumer in enumerate(self.consumers):
             if not isinstance(consumer.goods_amount, (int, float)) or consumer <= 0:
                 raise InvalidAmountGood(consumer, 1, consumer_id)
+
         for supplier_id, prices in enumerate(self.price_matrix, 1):
             if len(prices) != self.__consumers_amount:
                 raise MatrixDimensionError(self.__consumers_amount, len(prices))
             for consumer_id, root in enumerate(prices, 1):
                 if not isinstance(root.price, (int, float)) or root.price < 0:
                     raise InvalidPriceValueError(root.price, (supplier_id, consumer_id))
+
+        for cell, restriction in self.__restrictions.items():
+            if not self.__suppliers_amount > cell[0] >= 0 or not self.__consumers_amount > cell[1] >= 0:
+                raise InvalidRestrictionIndices(cell, (self.__suppliers_amount, self.__consumers_amount))
+            if restriction[0] not in ['>', '<']:
+                raise InvalidRestrictionSymbol(restriction[0])
+
+            consumer_value = self.price_matrix[cell[0]][cell[1]].consumer
+            supplier_value = self.price_matrix[cell[0]][cell[1]].supplier
+            if restriction[1] > consumer_value or restriction[1] > supplier_value or restriction[1] < 0:
+                raise InvalidRestrictionValue(restriction[1], (0,
+                                                               min(consumer_value, supplier_value).real_amount))
 
     def __make_table_balanced(self) -> None:
         goods = np.vectorize(lambda x: x.goods_amount)
@@ -181,8 +199,8 @@ class TransportTable:
             new_supplier = Supplier(abs_difference,  self.__suppliers_amount - 1)
             self.__suppliers = np.append(self.__suppliers, new_supplier)
             new_line = np.empty((1, self.__consumers_amount), dtype=Root)
-            for i in range(self.__suppliers_amount):
-                new_line[0][i] = Root(0, self.suppliers[i], new_supplier)
+            for i in range(self.__consumers_amount):
+                new_line[0][i] = Root(0, new_supplier, self.consumers[i])
             self.__price_matrix = np.concatenate((self.price_matrix, new_line), axis=0)
 
     def __epsilon_modify_table(self) -> None:
@@ -196,21 +214,19 @@ class TransportTable:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
-                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[0][0])
-
+                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[supplier_id][consumer_id])
         consumer_id = 0
         supplier_id = 0
         cost = 0
-        while consumer_id != self.__consumers_amount or supplier_id != self.__suppliers_amount:
+        while consumer_id != self.__consumers_amount and supplier_id != self.__suppliers_amount:
             root = self.price_matrix[supplier_id][consumer_id]
             min_participant = min(root.consumer, root.supplier)
             goods_amount = min_participant.goods_amount
             eps = min_participant.epsilon
             self.__basic_plan[supplier_id][consumer_id].amount = goods_amount
             self.__basic_plan[supplier_id][consumer_id].epsilon = eps
-            self.__basic_plan[supplier_id][consumer_id].repr= create_eps_expression(eps, goods_amount)
+            self.__basic_plan[supplier_id][consumer_id].repr = create_eps_expression(eps, goods_amount)
             cost += root.price * goods_amount
-
             if (root.consumer < root.supplier or
                     (root.consumer.epsilon < root.supplier.epsilon and root.consumer == root.supplier)):
                 root.supplier.goods_amount -= goods_amount
@@ -234,7 +250,7 @@ class TransportTable:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
-                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[0][0])
+                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[supplier_id][consumer_id])
 
         counter = 0
         cost = 0
@@ -267,7 +283,7 @@ class TransportTable:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
-                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[0][0])
+                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[supplier_id][consumer_id])
 
         cost = 0
         counter = 0
@@ -313,9 +329,8 @@ class TransportTable:
         self.__restore_price_matrix_values()
         return self.__basic_plan, cost
 
-    def __fill_conditional_values(self, solution: npt.NDArray[np.float64]
-                                  ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
-        filled_cells = list(zip(np.where(solution != '0')[0], np.where(solution != '0')[1]))
+    def __fill_conditional_values(self) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+        filled_cells = list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
 
         supplier_values = np.zeros(self.__suppliers_amount)
         supplier_values[0] = 0.0
@@ -343,10 +358,9 @@ class TransportTable:
             counter += 1
         return supplier_values, consumer_values
 
-    def __calculate_potentials(self, solution: npt.NDArray[np.float64],
-                               supplier_values: npt.NDArray[np.float64], consumer_values: npt.NDArray[np.float64]
+    def __calculate_potentials(self, supplier_values: npt.NDArray[np.float64], consumer_values: npt.NDArray[np.float64]
                                ) -> dict[tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]], np.float64]:
-        filled_cells = list(zip(np.where(solution == '0')[0], np.where(solution == '0')[1]))
+        filled_cells = list(zip(np.where(self.__solution == '0')[0], np.where(self.__solution == '0')[1]))
         potentials_dict = {}
         for cell in filled_cells:
             supplier_idx = cell[0]
@@ -356,9 +370,9 @@ class TransportTable:
             potentials_dict[cell] = potential
         return potentials_dict
 
-    def __find_potential_loop(self, solution: npt.NDArray[np.float64],
-                              min_potential: tuple[tuple[np.int64], np.float64]) -> list[tuple[np.int64]] | None:
-        filled_cells = list(zip(np.where(solution != '0')[0], np.where(solution != '0')[1])) + [min_potential[0]]
+    def __find_potential_loop(self, min_potential: tuple[tuple[np.int64], np.float64]) -> list[tuple[np.int64]] | None:
+        filled_cells = (list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
+                        + [min_potential[0]])
         queue = deque()
         queue.append((min_potential[0][0], min_potential[0][1], [], 'row'))
         queue.append((min_potential[0][0], min_potential[0][1], [], 'col'))
@@ -385,23 +399,23 @@ class TransportTable:
                     queue.append((cell[0], cell[1], new_path, 'row'))
         return []
 
-    def __find_min_loop_value(self, solution: npt.NDArray[np.float64], loop: list[tuple[np.int64]]
-                              )-> tuple[int | float, int]:
-        min_value = solution[loop[1][0]][loop[1][1]].amount + (solution[loop[1][0]][loop[1][1]].epsilon * 1e-6)
+    def __find_min_loop_value(self, loop: list[tuple[np.int64]]) -> tuple[int | float, int]:
+        min_value = (self.__solution[loop[1][0]][loop[1][1]].amount +
+                     (self.__solution[loop[1][0]][loop[1][1]].epsilon * EPSILON_VAL))
         min_indices = loop[1]
         for i in range(1, len(loop), 2):
-            root = solution[loop[i][0]][loop[i][1]]
-            cell_amount = root.amount + (root.epsilon * 1e-6)
+            root = self.__solution[loop[i][0]][loop[i][1]]
+            cell_amount = root.amount + (root.epsilon * EPSILON_VAL)
             if cell_amount < min_value:
                 min_value = cell_amount
                 min_indices = loop[i]
 
-        return solution[min_indices[0]][min_indices[1]].amount, solution[min_indices[0]][min_indices[1]].epsilon
+        return (self.__solution[min_indices[0]][min_indices[1]].amount,
+                self.__solution[min_indices[0]][min_indices[1]].epsilon)
 
-    def __transportation_redistribution(self, solution: npt.NDArray[np.float64], loop: list[tuple[np.int64]],
-                                        amount: int | float, epsilon: int):
+    def __transportation_redistribution(self, loop: list[tuple[np.int64]], amount: int | float, epsilon: int) -> None:
         for idx, cell in enumerate(loop):
-            root = solution[cell[0]][cell[1]]
+            root = self.__solution[cell[0]][cell[1]]
             if idx % 2 == 0:
                 root.amount += amount
                 root.epsilon += epsilon
@@ -410,10 +424,57 @@ class TransportTable:
                 root.epsilon -= epsilon
             root.repr = create_eps_expression(root.epsilon, root.amount)
 
-    def get_optimal_solution_price(self, solution) -> int | float:
+    def __put_additional_restriction(self, supplier_id: int, consumer_id: int, action: str, amount: int | float):
+        root = self.price_matrix[supplier_id][consumer_id]
+        if action == '>':
+            root.supplier.real_amount -= amount
+            root.supplier.goods_amount -= amount
+            root.consumer.real_amount -= amount
+            root.consumer.goods_amount -= amount
+        else:
+            prev_amount = self.__suppliers[supplier_id].real_amount
+            self.__suppliers[supplier_id].real_amount = amount
+            self.__suppliers[supplier_id].goods_amount = amount
+
+            self.__suppliers_amount += 1
+            new_supplier = Supplier(prev_amount - amount, self.__suppliers_amount - 1)
+            self.__suppliers = np.append(self.__suppliers, new_supplier)
+            new_line = np.empty((1, self.__consumers_amount), dtype=Root)
+
+            for i in range(0, self.__consumers_amount):
+                new_line[0][i] = Root(0 if i != consumer_id else sys.maxsize, new_supplier, self.consumers[i])
+            self.__price_matrix = np.concatenate((self.price_matrix, new_line), axis=0)
+
+    def __remove_additional_restriction(self, supplier_id: int, consumer_id: int, action: str, amount: int | float):
+        root = self.price_matrix[supplier_id][consumer_id]
+        if action == '>':
+            root.supplier.real_amount += amount
+            root.supplier.goods_amount += amount
+            root.consumer.real_amount += amount
+            root.consumer.goods_amount += amount
+
+            solution_root = self.__solution[supplier_id][consumer_id]
+            solution_root.amount += amount
+            solution_root.repr = create_eps_expression(solution_root.epsilon, solution_root.amount)
+        else:
+            final_amount = self.__suppliers[supplier_id].real_amount + self.__suppliers[-1].real_amount
+            self.suppliers[supplier_id].real_amount = final_amount
+            self.suppliers[supplier_id].goods_amount = final_amount
+
+            for i in range(0, self.__consumers_amount):
+                solution_root = self.__solution[supplier_id][i]
+                solution_root.amount += self.__solution[-1][i].amount
+                solution_root.epsilon += self.__solution[-1][i].epsilon
+                solution_root.repr = create_eps_expression(solution_root.epsilon, solution_root.amount)
+
+            self.__suppliers_amount -= 1
+            self.__suppliers = np.delete(self.suppliers, -1)
+            self.__solution = self.__solution = np.delete(self.__solution, -1, axis=0)
+
+    def get_optimal_solution_price(self) -> int | float:
         price = 0
-        for i in range(len(solution)):
-            for root in solution[i]:
+        for i in range(len(self.__solution)):
+            for root in self.__solution[i]:
                 price += root.amount * root.price
         return price
 
@@ -421,6 +482,10 @@ class TransportTable:
         res = self.check_table_balance()
         if not res:
             self.__make_table_balanced()
+
+        for cell, restriction in self.__restrictions.items():
+            self.__put_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
+
         if mode == 1:
             basic_plan = self.__north_western_method()
         elif mode == 2:
@@ -429,24 +494,30 @@ class TransportTable:
             basic_plan = self.__fogel_method()
         return basic_plan
 
-    def create_optimal_plan(self):
-        solution = self.latest_basic_plan
+    def create_optimal_plan(self) -> Optional[tuple[npt.NDArray[np.float64], int | float]]:
+        self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
+        for supplier_id in range(self.__suppliers_amount):
+            for consumer_id in range(self.__consumers_amount):
+                self.__solution[supplier_id][consumer_id] = copy.copy(self.latest_basic_plan[supplier_id][consumer_id])
+
         while True:
-            supplier_values, consumer_values = self.__fill_conditional_values(solution)
-            potentials = self.__calculate_potentials(solution, supplier_values, consumer_values)
+            supplier_values, consumer_values = self.__fill_conditional_values()
+            potentials = self.__calculate_potentials(supplier_values, consumer_values)
             values = np.array([*potentials.values()])
             if np.any(values < 0):
                 min_potential = sorted(potentials.items(), key=lambda x: x[1])[0]
-                loop = self.__find_potential_loop(solution, min_potential)
+                loop = self.__find_potential_loop(min_potential)
                 if not loop:
                     return None
-                amount, epsilon = self.__find_min_loop_value(solution, loop)
-                self.__transportation_redistribution(solution, loop, amount, epsilon)
+                amount, epsilon = self.__find_min_loop_value(loop)
+                self.__transportation_redistribution(loop, amount, epsilon)
             else:
                 break
-        price = self.get_optimal_solution_price(solution)
-        return solution, price
+        for cell, restriction in self.__restrictions.items():
+            self.__remove_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
 
+        price = self.get_optimal_solution_price()
+        return self.__solution, price
 
     @property
     def price_matrix(self):
@@ -463,3 +534,7 @@ class TransportTable:
     @property
     def latest_basic_plan(self):
         return self.__basic_plan
+
+    @property
+    def latest_optimal_plan(self):
+        return self.__solution

@@ -4,6 +4,7 @@ from numpy import typing as npt
 
 
 MAIN_ANSWER = 42
+EPSILON_VAL = 1e-6
 
 
 def create_eps_expression(eps: int, goods_amount: int | float) -> str:
