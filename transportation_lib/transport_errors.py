@@ -1,7 +1,7 @@
 from typing import Any
 
 
-class MatrixDimensionError(Exception):
+class InvalidMatrixDimension(Exception):
     def __init__(self, amount: int, length: int) -> None:
         self.__amount = amount
         self.__length = length
@@ -56,3 +56,25 @@ class InvalidRestrictionValue(Exception):
 
     def __str__(self) -> str:
         return f'Численное значение ограничения {self.__value} выходит за допустимые границы {self.__value_borders}'
+
+
+class InvalidCapacitiesDimension(Exception):
+    def __init__(self, capacities_shape: tuple[int], matrix_shape: tuple[int]) -> None:
+        self.__capacities_shape = capacities_shape
+        self.__matrix_shape = matrix_shape
+
+    def __str__(self) -> str:
+        return (f'Переданная размерность для пропускных способностей {self.__capacities_shape}'
+                f' не соответствует переданной размерности матрицы {self.__matrix_shape}')
+
+
+class InvalidCapacityValue(Exception):
+    def __init__(self, value: int | float, line_value: int | float, line_num: int, line_type: int) -> None:
+        self.__value = value
+        self.__line_value = line_value
+        self.__line_num = line_num
+        self.__line_type = 'Строка' if line_type == 0 else 'Столбец'
+
+    def __str__(self) -> str:
+        return (f'{self.__line_type} №{self.__line_num} имеет значение ({self.__line_value}) больше,'
+                f' чем пропускная способность {self.__value}')
