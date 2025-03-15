@@ -384,15 +384,15 @@ class TransportTable:
             self.__epsilon_modify_table()
             return self.__fogel_method()
 
-        if self.__check_balance_equations() is False:
-            print('Not balanced!')
-            pass
         return self.__basic_plan, cost
 
     def __fill_conditional_values(self, filled_cells: list[tuple[int, int]]=None
                                   ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
         if not filled_cells:
-            filled_cells = list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
+            new_field_cells =  list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
+        else:
+            new_field_cells = filled_cells.copy()
+
         supplier_values = np.zeros(self.__suppliers_amount)
         supplier_values[0] = 0.0
         filled_suppliers_indices = [0]
@@ -401,20 +401,20 @@ class TransportTable:
         counter = 1
 
         while counter != self.__suppliers_amount + self.__consumers_amount:
-            generator_indices = get_all_indices(filled_cells)
+            generator_indices = get_all_indices(new_field_cells)
             for pair in generator_indices:
                 supplier_idx, consumer_idx = pair
                 if supplier_idx in filled_suppliers_indices:
                     filled_consumers_indices = np.append(filled_consumers_indices, consumer_idx)
                     consumer_values[consumer_idx] = (supplier_values[supplier_idx]
                                                      + np.float64(self.price_matrix[supplier_idx][consumer_idx].price))
-                    filled_cells.remove(pair)
+                    new_field_cells.remove(pair)
                     break
                 if consumer_idx in filled_consumers_indices:
                     filled_suppliers_indices = np.append(filled_suppliers_indices, supplier_idx)
                     supplier_values[supplier_idx] = (consumer_values[consumer_idx]
                                                      - np.float64(self.price_matrix[supplier_idx][consumer_idx].price))
-                    filled_cells.remove(pair)
+                    new_field_cells.remove(pair)
                     break
             counter += 1
         return supplier_values, consumer_values
@@ -436,13 +436,14 @@ class TransportTable:
     def __find_potential_loop(self, min_potential: tuple[tuple[np.int64], np.float64],
                               filled_cells: list[tuple[int, int]]=None) -> list[tuple[np.int64]] | None:
         if not filled_cells:
-            filled_cells = (list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
+            new_filled_cells = (list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
                             + [min_potential[0]])
+        else:
+            new_filled_cells = filled_cells.copy() + [min_potential[0]]
         queue = deque()
         queue.append((min_potential[0][0], min_potential[0][1], [], 'row'))
         queue.append((min_potential[0][0], min_potential[0][1], [], 'col'))
         visited = set()
-
         while queue:
             i, j, path, next_dir = queue.popleft()
             if (i, j) == (min_potential[0][0], min_potential[0][1]) and len(path) >= 3:
@@ -453,12 +454,12 @@ class TransportTable:
             visited.add((i, j, next_dir))
 
             if next_dir == 'row':
-                candidates = [cell for cell in filled_cells if cell[0] == i and cell != (i, j)]
+                candidates = [cell for cell in new_filled_cells if cell[0] == i and cell != (i, j)]
                 for cell in candidates:
                     new_path = path + [(i, j)]
                     queue.append((cell[0], cell[1], new_path, 'col'))
             elif next_dir == 'col':
-                candidates = [cell for cell in filled_cells if cell[1] == j and cell != (i, j)]
+                candidates = [cell for cell in new_filled_cells if cell[1] == j and cell != (i, j)]
                 for cell in candidates:
                     new_path = path + [(i, j)]
                     queue.append((cell[0], cell[1], new_path, 'row'))
@@ -478,21 +479,18 @@ class TransportTable:
         return (self.__solution[min_indices[0]][min_indices[1]].amount,
                 self.__solution[min_indices[0]][min_indices[1]].epsilon)
 
-    def __find_min_loop_capacity_value(self, loop: list[tuple[np.int64]]) -> tuple[int | float, int]:
+    def __find_min_loop_capacity_value(self, loop: list[tuple[np.int64]]) -> int | float:
         min_value = self.__solution[loop[0][0]][loop[0][1]].capacity
-        min_root = self.__solution[loop[0][0]][loop[0][1]]
-        for i in range(1, len(loop)):
+        for i in range(len(loop)):
             root = self.__solution[loop[i][0]][loop[i][1]]
             if i % 2 == 0:
                 redistr_val = root.capacity - (root.amount + (root.epsilon * EPSILON_VAL))
             else:
                 redistr_val = root.amount + (root.epsilon * EPSILON_VAL)
-
             if redistr_val < min_value:
                 min_value = redistr_val
-                min_root = root
 
-        return min_root.amount, min_root.epsilon
+        return min_value
 
     def __transportation_redistribution(self, loop: list[tuple[np.int64]], amount: int | float, epsilon: int) -> None:
         for idx, cell in enumerate(loop):
@@ -598,8 +596,8 @@ class TransportTable:
             for consumer_id in range(self.__consumers_amount):
                 self.__solution[supplier_id][consumer_id] = copy.copy(self.latest_basic_plan[supplier_id][consumer_id])
 
+        used_plans = []
         while True:
-            print('-' * 1000)
             basic_plan_cells = []
             reserve_cells = []
             for supplier_row in self.__solution:
@@ -609,40 +607,26 @@ class TransportTable:
                     elif root.amount == 0 or root.amount == root.capacity:
                         reserve_cells.append(root)
             acyclic_cells, other_cells = find_acyclic_plan(basic_plan_cells, reserve_cells,
-                                                           self.__suppliers_amount, self.__consumers_amount)
-            print('reserve_cells', [(root.supplier.id, root.consumer.id) for root in reserve_cells])
-            print('basic_plan_cells', [(root.supplier.id, root.consumer.id) for root in basic_plan_cells])
-            print('other_cells', other_cells)
+                                                           self.__suppliers_amount, self.__consumers_amount,  used_plans)
 
             supplier_values, consumer_values = self.__fill_conditional_values(acyclic_cells)
-            print('supplier_values', supplier_values)
-            print('consumer_values', consumer_values)
+
             potentials = self.__calculate_potentials(supplier_values, consumer_values, other_cells)
-            print('potentials', potentials)
             d_values = np.array([val for key, val in potentials.items() if key[2] == 'd'])
             c_values = np.array([val for key, val in potentials.items() if key[2] == 'c'])
-            print('d_values', d_values)
-            print('c_values', c_values)
-            if np.any(d_values > 0):
-                min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'd'], key=lambda x: x[1])[0]
-                print('min_potential', min_potential)
+
+            if np.any(d_values > 0) or np.any(c_values < 0):
+                if np.any(c_values < 0):
+                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'c'], key=lambda x: x[1])[0]
+                elif np.any(d_values > 0):
+                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'd'], key=lambda x: x[1])[0]
                 loop = self.__find_potential_loop(min_potential, acyclic_cells)
-                print('loop', loop)
                 if not loop:
-                    return None
-                amount, epsilon = self.__find_min_loop_capacity_value(loop)
-                print('amount, epsilon', amount, epsilon)
-                self.__transportation_redistribution(loop, amount, epsilon)
-            elif np.any(c_values < 0):
-                min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'c'], key=lambda x: x[1])[0]
-                print('min_potential', min_potential)
-                loop = self.__find_potential_loop(min_potential, acyclic_cells)
-                print('loop', loop)
-                if not loop:
-                    return None
-                amount, epsilon = self.__find_min_loop_capacity_value(loop)
-                print('amount, epsilon', amount, epsilon)
-                self.__transportation_redistribution(loop, amount, epsilon)
+                    continue
+                amount = self.__find_min_loop_capacity_value(loop)
+
+                if amount != 0:
+                    self.__transportation_redistribution(loop, int(amount), epsilon=0)
             else:
                 break
 
@@ -672,10 +656,6 @@ class TransportTable:
             basic_plan = self.__minimum_cost_method()
         else:
             basic_plan = self.__fogel_method()
-        if self.__check_balance_equations() is False:
-            self.__extend_transport_matrix()
-            self.pprint_res(self.__basic_plan)
-            self.__solve_extended_transport_matrix()
         self.__restore_price_matrix_values()
         return basic_plan
 
@@ -700,6 +680,18 @@ class TransportTable:
                 break
         for cell, restriction in self.__restrictions.items():
             self.__remove_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
+
+        price = self.get_optimal_solution_price()
+        return self.__solution, price
+
+    def solve_capacity_plan(self):
+        self.__minimum_cost_method()
+        # self.__fogel_method()
+        if self.__check_balance_equations() is False:
+            self.__extend_transport_matrix()
+            self.__solve_extended_transport_matrix()
+        else:
+            self.create_optimal_plan()
 
         price = self.get_optimal_solution_price()
         return self.__solution, price

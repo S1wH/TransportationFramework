@@ -103,7 +103,9 @@ def get_all_indices(filed_indices):
     yield from filed_indices
 
 
-def find_acyclic_plan(basic_plan_cells, reserve_cells, m, n):
+def find_acyclic_plan(basic_plan_cells, reserve_cells, m, n, used_plans):
+    reserve_cells_copy = reserve_cells.copy()
+
     # Инициализация Union-Find для m поставщиков и n потребителей
     uf = UnionFind(m + n)
 
@@ -115,17 +117,21 @@ def find_acyclic_plan(basic_plan_cells, reserve_cells, m, n):
     for root in basic_plan_cells:
         uf.union(root.supplier.id - 1, m + root.consumer.id  - 1)
 
-    # Добавляем ребра из reserve_cells, избегая циклов
-    for root in reserve_cells:
-        if uf.find(root.supplier.id - 1) != uf.find(m + root.consumer.id - 1):  # Разные компоненты
+    while len(selected) !=  m + n - 1:
+        root = random.choice(reserve_cells_copy)
+        if uf.find(root.supplier.id - 1) != uf.find(m + root.consumer.id - 1):
             selected.append((root.supplier.id, root.consumer.id))
             uf.union(root.supplier.id - 1, m + root.consumer.id - 1)
-            if len(selected) == m + n - 1:  # Достигли максимума
-                continue
-        else:
-            if root.amount == 0:
-                unselected.append((root.supplier.id, root.consumer.id, 'c'))
-            elif root.amount == root.capacity:
-                unselected.append((root.supplier.id, root.consumer.id, 'd'))
+
+    selected.sort()
+    if selected in used_plans:
+        find_acyclic_plan(basic_plan_cells, reserve_cells, m, n, used_plans)
+    used_plans.append(selected)
+
+    for root in reserve_cells_copy:
+        if root.amount == 0:
+            unselected.append((root.supplier.id, root.consumer.id, 'c'))
+        elif root.amount == root.capacity:
+            unselected.append((root.supplier.id, root.consumer.id, 'd'))
 
     return selected, unselected
