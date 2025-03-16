@@ -686,7 +686,7 @@ class TransportTable:
 
     def solve_capacity_plan(self):
         self.__minimum_cost_method()
-        # self.__fogel_method()
+
         if self.__check_balance_equations() is False:
             self.__extend_transport_matrix()
             self.__solve_extended_transport_matrix()
