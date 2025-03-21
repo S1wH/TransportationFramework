@@ -14,30 +14,30 @@ def get_tables(db: Session = Depends(get_db)):
 
 
 @router.get('/{table_id}')
-def get_table(table_id: int):
-    pass
+def get_table(table_id: int, db: Session = Depends(get_db)):
+    return services.get_table(db, table_id)
 
 
 @router.post('/create')
 def create_table(table: TransportTable, db: Session = Depends(get_db)):
-    return services.create_table(table, db)
+    return services.create_table(db, table)
 
 
-@router.post('create_basic_plan/{table_id}')
-def create_basic_plan(table_id: int):
-    pass
+@router.post('/create_basic_plan/{table_id}')
+def create_basic_plan(table_id: int, db: Session = Depends(get_db)):
+    return services.create_basic_plan(db, table_id)
 
 
-@router.post('create_optimal_plan/{table_id}')
+@router.post('/create_optimal_plan/{table_id}')
 def create_optimal_plan(table_id: int):
     pass
 
 
-@router.get('last_basic_plan/{table_id}')
+@router.get('/last_basic_plan/{table_id}')
 def get_table_last_basic_plan(table_id: int):
     pass
 
 
-@router.get('last_optimal_plan/{table_id}')
+@router.get('/last_optimal_plan/{table_id}')
 def get_table_last_optimal_plan(table_id: int):
     pass

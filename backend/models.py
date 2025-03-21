@@ -18,7 +18,7 @@ class Root(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
 
     capacity: Mapped[Optional[int]] = mapped_column()
-    restriction: Mapped[Optional[int]] = mapped_column()
+    restriction: Mapped[Optional[str]] = mapped_column()
     price: Mapped[int] = mapped_column()
     epsilon: Mapped[int] = mapped_column()
     amount: Mapped[float] = mapped_column()
