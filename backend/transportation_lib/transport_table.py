@@ -3,6 +3,8 @@ import copy
 from collections import deque
 from typing import Optional
 from abc import ABC
+
+import numpy as np
 from prettytable import PrettyTable
 from .transport_errors import (InvalidMatrixDimension, InvalidPriceValueError, InvalidAmountGood,
                                InvalidRestrictionValue, InvalidRestrictionIndices, InvalidRestrictionSymbol,
@@ -86,7 +88,7 @@ class Root:
 
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
-                 price_matrix: list[list[float | int]], restrictions: dict[tuple[int, int], tuple[str, int]]=dict(),
+                 price_matrix: npt.NDArray[npt.NDArray[float]], restrictions: dict[tuple[int, int], tuple[str, int]]={},
                  capacities: list[list[float | int]]=None) -> None:
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
@@ -131,7 +133,7 @@ class TransportTable:
         table.add_row(row)
         print(table)
 
-    def pprint_res(self, solution: npt.NDArray[npt.NDArray[np.float64]]) -> None:
+    def pprint_res(self, solution: npt.NDArray[npt.NDArray[np.float16]]) -> None:
         table = PrettyTable([''] + [f'T{i + 1}' for i in range(self.price_matrix[0].size)] + ['A'])
         for i in range(len(solution)):
             row = [f'S{i + 1}']
@@ -217,7 +219,7 @@ class TransportTable:
             if len(prices) != self.__consumers_amount:
                 raise InvalidMatrixDimension(self.__consumers_amount, len(prices))
             for consumer_id, root in enumerate(prices, 1):
-                if not isinstance(root.price, (int, float)) or root.price < 0:
+                if not isinstance(root.price, (int, float, np.float16)) or root.price < 0:
                     raise InvalidPriceValueError(root.price, (supplier_id, consumer_id))
 
         if self.__restrictions:
@@ -283,7 +285,7 @@ class TransportTable:
                 disbalanced_consumers[consumer.id] = (consumer.goods_amount, consumer.epsilon)
         return disbalanced_suppliers, disbalanced_consumers
 
-    def __north_western_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+    def __north_western_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -316,7 +318,7 @@ class TransportTable:
                 return self.__north_western_method()
         return self.__basic_plan, cost
 
-    def __minimum_cost_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+    def __minimum_cost_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -350,7 +352,7 @@ class TransportTable:
 
         return self.__basic_plan, cost
 
-    def __fogel_method(self) -> tuple[npt.NDArray[np.float64], int | float]:
+    def __fogel_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -387,7 +389,7 @@ class TransportTable:
         return self.__basic_plan, cost
 
     def __fill_conditional_values(self, filled_cells: list[tuple[int, int]]=None
-                                  ) -> tuple[npt.NDArray[np.float64], npt.NDArray[np.float64]]:
+                                  ) -> tuple[npt.NDArray[np.float16], npt.NDArray[np.float16]]:
         if not filled_cells:
             new_field_cells =  list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
         else:
@@ -407,21 +409,21 @@ class TransportTable:
                 if supplier_idx in filled_suppliers_indices:
                     filled_consumers_indices = np.append(filled_consumers_indices, consumer_idx)
                     consumer_values[consumer_idx] = (supplier_values[supplier_idx]
-                                                     + np.float64(self.price_matrix[supplier_idx][consumer_idx].price))
+                                                     + np.float16(self.price_matrix[supplier_idx][consumer_idx].price))
                     new_field_cells.remove(pair)
                     break
                 if consumer_idx in filled_consumers_indices:
                     filled_suppliers_indices = np.append(filled_suppliers_indices, supplier_idx)
                     supplier_values[supplier_idx] = (consumer_values[consumer_idx]
-                                                     - np.float64(self.price_matrix[supplier_idx][consumer_idx].price))
+                                                     - np.float16(self.price_matrix[supplier_idx][consumer_idx].price))
                     new_field_cells.remove(pair)
                     break
             counter += 1
         return supplier_values, consumer_values
 
-    def __calculate_potentials(self, supplier_values: npt.NDArray[np.float64], consumer_values: npt.NDArray[np.float64],
+    def __calculate_potentials(self, supplier_values: npt.NDArray[np.float16], consumer_values: npt.NDArray[np.float16],
                                filled_cells: list[tuple[int, int]]=None
-                               ) -> dict[tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]], np.float64]:
+                               ) -> dict[tuple[npt.NDArray[np.int64], npt.NDArray[np.int64]], np.float16]:
         if not filled_cells:
             filled_cells = list(zip(np.where(self.__solution == '0')[0], np.where(self.__solution == '0')[1]))
         potentials_dict = {}
@@ -433,7 +435,7 @@ class TransportTable:
             potentials_dict[cell] = potential
         return potentials_dict
 
-    def __find_potential_loop(self, min_potential: tuple[tuple[np.int64], np.float64],
+    def __find_potential_loop(self, min_potential: tuple[tuple[np.int64], np.float16],
                               filled_cells: list[tuple[int, int]]=None) -> list[tuple[np.int64]] | None:
         if not filled_cells:
             new_filled_cells = (list(zip(np.where(self.__solution != '0')[0], np.where(self.__solution != '0')[1]))
@@ -642,7 +644,7 @@ class TransportTable:
                 price += root.amount * root.price
         return price
 
-    def create_basic_plan(self, mode: int=1) -> tuple[npt.NDArray[np.float64], int | float]:
+    def create_basic_plan(self, mode: int=1) -> tuple[npt.NDArray[np.float16], int | float]:
         res = self.check_table_balance()
         if not res:
             self.__make_table_balanced()
@@ -659,7 +661,7 @@ class TransportTable:
         self.__restore_price_matrix_values()
         return basic_plan
 
-    def create_optimal_plan(self) -> Optional[tuple[npt.NDArray[np.float64], int | float]]:
+    def create_optimal_plan(self) -> Optional[tuple[npt.NDArray[np.float16], int | float]]:
         self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
