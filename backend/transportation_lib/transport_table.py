@@ -1,10 +1,8 @@
 import operator
 import copy
 from collections import deque
-from typing import Optional
+from typing import Optional, List
 from abc import ABC
-
-import numpy as np
 from prettytable import PrettyTable
 from .transport_errors import (InvalidMatrixDimension, InvalidPriceValueError, InvalidAmountGood,
                                InvalidRestrictionValue, InvalidRestrictionIndices, InvalidRestrictionSymbol,
@@ -285,7 +283,7 @@ class TransportTable:
                 disbalanced_consumers[consumer.id] = (consumer.goods_amount, consumer.epsilon)
         return disbalanced_suppliers, disbalanced_consumers
 
-    def __north_western_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
+    def __north_western_method(self) -> tuple[npt.NDArray[Root], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -318,7 +316,7 @@ class TransportTable:
                 return self.__north_western_method()
         return self.__basic_plan, cost
 
-    def __minimum_cost_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
+    def __minimum_cost_method(self) -> tuple[npt.NDArray[Root], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -352,7 +350,7 @@ class TransportTable:
 
         return self.__basic_plan, cost
 
-    def __fogel_method(self) -> tuple[npt.NDArray[np.float16], int | float]:
+    def __fogel_method(self) -> tuple[npt.NDArray[Root], int | float]:
         self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -637,6 +635,13 @@ class TransportTable:
             if self.__solution[-1][-1].repr == consumer_exp == supplier_epx:
                 self.__collapse_transport_matrix()
 
+    def __create_transition_matrix(self, matrix: npt.NDArray[Root]) -> List[List[str]]:
+        transition_matrix = [['0' for _ in range(self.__consumers_amount)] for _ in range(self.__suppliers_amount)]
+        for supplier_idx, line in enumerate(matrix):
+            for consumer_idx, item in enumerate(line):
+                transition_matrix[supplier_idx][consumer_idx] = item.repr
+        return transition_matrix
+
     def get_optimal_solution_price(self) -> int | float:
         price = 0
         for i in range(len(self.__solution)):
@@ -644,7 +649,7 @@ class TransportTable:
                 price += root.amount * root.price
         return price
 
-    def create_basic_plan(self, mode: int=1) -> tuple[npt.NDArray[np.float16], int | float]:
+    def create_basic_plan(self, mode: int=1) -> tuple[List[List[str]], int | float]:
         res = self.check_table_balance()
         if not res:
             self.__make_table_balanced()
@@ -658,10 +663,12 @@ class TransportTable:
             basic_plan = self.__minimum_cost_method()
         else:
             basic_plan = self.__fogel_method()
-        self.__restore_price_matrix_values()
-        return basic_plan
 
-    def create_optimal_plan(self) -> Optional[tuple[npt.NDArray[np.float16], int | float]]:
+        transition_matrix = self.__create_transition_matrix(basic_plan[0])
+        self.__restore_price_matrix_values()
+        return transition_matrix, basic_plan[1]
+
+    def create_optimal_plan(self) -> Optional[tuple[List[List[str]], int | float]]:
         self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -684,9 +691,10 @@ class TransportTable:
             self.__remove_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
 
         price = self.get_optimal_solution_price()
-        return self.__solution, price
+        transition_matrix = self.__create_transition_matrix(self.__solution)
+        return transition_matrix, price
 
-    def solve_capacity_plan(self):
+    def solve_capacity_plan(self) -> Optional[tuple[List[List[str]], int | float]]:
         self.__minimum_cost_method()
 
         if self.__check_balance_equations() is False:
@@ -696,7 +704,8 @@ class TransportTable:
             self.create_optimal_plan()
 
         price = self.get_optimal_solution_price()
-        return self.__solution, price
+        transition_matrix = self.__create_transition_matrix(self.__solution)
+        return transition_matrix, price
 
     @property
     def price_matrix(self):
@@ -717,3 +726,7 @@ class TransportTable:
     @property
     def latest_optimal_plan(self):
         return self.__solution
+
+    @property
+    def has_capacities(self):
+        return self.__capacities is not None

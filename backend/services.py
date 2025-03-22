@@ -1,9 +1,7 @@
 import numpy as np
 from typing import Optional, List, Type
 from sqlalchemy.orm import Session
-from sqlalchemy.sql import text
-from backend import models, schemas
-from backend.transportation_lib import transport_table
+from backend import models, schemas, utils
 
 
 def get_tables(db: Session) -> List[Type[schemas.TransportTable]]:
@@ -73,36 +71,22 @@ def create_table(db: Session, table: schemas.TransportTable) -> int:
         return t_table.id
 
 
-def create_basic_plan(db: Session, table_id: int):
+def create_basic_plan(db: Session, table_id: int, mode: int) -> schemas.Solution:
     table = db.get(models.TransportTable, table_id)
-    with db as session:
-        consumers = [p.goods_amount for p in session.query(models.Participant)
-        .filter_by(transport_table_id=table.id, is_supplier=False)
-        .order_by(models.Participant.line_id)]
 
-        suppliers = [p.goods_amount for p in session.query(models.Participant)
-        .filter_by(transport_table_id=table.id, is_supplier=True)
-        .order_by(models.Participant.line_id)]
+    t = utils.get_transport_table_info(db, table)
 
-        price_matrix = np.zeros((len(suppliers), len(consumers)), dtype=np.float16)
-        capacities = np.zeros((len(suppliers), len(consumers)), dtype=np.float16) \
-            if list(table.roots)[0].capacity else None
+    solution, price = t.create_basic_plan(mode)
+    return schemas.Solution(price=price, transition_matrix=solution, is_optimal=False)
 
-        restrictions = {}
-        for root in table.roots:
-            supplier_id = root.supplier.line_id
-            consumer_id = root.consumer.line_id
-            price_matrix[supplier_id][consumer_id] = root.price
-            if root.capacity:
-                capacities[supplier_id][consumer_id] = root.capacity
 
-            restriction = root.restriction
-            if restriction:
-                restrictions[(supplier_id, consumer_id)] = (restriction[0], int(restriction[1:]))
+def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Solution:
+    table = db.get(models.TransportTable, table_id)
 
-    t = transport_table.TransportTable(
-        list(suppliers), list(consumers), price_matrix, restrictions, capacities
-    )
-
-    solution, price = t.create_basic_plan()
-    print(solution)
+    t = utils.get_transport_table_info(db, table)
+    if t.has_capacities:
+        solution, price = t.solve_capacity_plan()
+    else:
+        t.create_basic_plan(mode)
+        solution, price = t.create_optimal_plan()
+    return schemas.Solution(price=price, transition_matrix=solution, is_optimal=True)

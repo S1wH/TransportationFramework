@@ -24,12 +24,17 @@ def create_table(table: TransportTable, db: Session = Depends(get_db)):
 
 
 @router.post('/create_basic_plan/{table_id}')
-def create_basic_plan(table_id: int, db: Session = Depends(get_db)):
-    return services.create_basic_plan(db, table_id)
+def create_basic_plan(table_id: int, db: Session = Depends(get_db), mode: int=1):
+    return services.create_basic_plan(db, table_id, mode)
 
 
 @router.post('/create_optimal_plan/{table_id}')
-def create_optimal_plan(table_id: int):
+def create_optimal_plan(table_id: int, db: Session = Depends(get_db), mode: int=1):
+    return services.create_optimal_plan(db, table_id, mode)
+
+
+@router.post('/save_solution/{table_id}')
+def save_solution(table_id: int, db: Session = Depends(get_db)):
     pass
 
 
