@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import List
+from typing import List, Dict, Tuple
 
 
 class TransportTable(BaseModel):
@@ -12,5 +12,11 @@ class TransportTable(BaseModel):
 
 class Solution(BaseModel):
     price: float | int
-    transition_matrix: List[List[str]]
     is_optimal: bool
+    transition_matrix: List[List[str]]
+
+
+class InputSolution(BaseModel):
+    price: float | int
+    is_optimal: bool
+    roots: Dict[Tuple[int, int], Tuple[float | int, int]]

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 from backend import services
 from backend.database import get_db
-from backend.schemas import TransportTable
+from backend.schemas import TransportTable, InputSolution
 
 
 router = APIRouter(prefix="/tables", tags=["tables"])
@@ -34,8 +34,8 @@ def create_optimal_plan(table_id: int, db: Session = Depends(get_db), mode: int=
 
 
 @router.post('/save_solution/{table_id}')
-def save_solution(table_id: int, db: Session = Depends(get_db)):
-    pass
+def save_solution(table_id: int, solution:InputSolution, db: Session = Depends(get_db)):
+    return services.save_solution(db, table_id, solution)
 
 
 @router.get('/last_basic_plan/{table_id}')

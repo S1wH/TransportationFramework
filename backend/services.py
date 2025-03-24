@@ -90,3 +90,36 @@ def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Soluti
         t.create_basic_plan(mode)
         solution, price = t.create_optimal_plan()
     return schemas.Solution(price=price, transition_matrix=solution, is_optimal=True)
+
+
+def save_solution(db: Session, table_id: int, table_solution: schemas.InputSolution) -> int:
+    table = db.get(models.TransportTable, table_id)
+
+    with db as session:
+        solution = models.TableSolution(
+            is_optimal=table_solution.is_optimal,
+            price=table_solution.price,
+            table_id=table_id
+        )
+        session.add(solution)
+        session.commit()
+        session.refresh(solution)
+
+        for key, value in table_solution.roots.items():
+            supplier_id, consumer_id = key
+            amount, epsilon = value
+
+            root = session.query(models.Root).filter_by(
+                supplier_id=supplier_id,
+                consumer_id=consumer_id,
+                transport_table_id=table_id
+            ).one()
+
+            solution_root = models.SolutionRoot(
+                amount=amount,
+                epsilon=epsilon,
+                solution_id=solution.id,
+                root=root.id
+            )
+            print(root)
+            print(solution_root)
