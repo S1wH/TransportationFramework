@@ -19,4 +19,4 @@ class Solution(BaseModel):
 class InputSolution(BaseModel):
     price: float | int
     is_optimal: bool
-    roots: Dict[Tuple[int, int], Tuple[float | int, int]]
+    roots: List[Dict[str, int | float]]

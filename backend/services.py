@@ -1,4 +1,3 @@
-import numpy as np
 from typing import Optional, List, Type
 from sqlalchemy.orm import Session
 from backend import models, schemas, utils
@@ -93,8 +92,6 @@ def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Soluti
 
 
 def save_solution(db: Session, table_id: int, table_solution: schemas.InputSolution) -> int:
-    table = db.get(models.TransportTable, table_id)
-
     with db as session:
         solution = models.TableSolution(
             is_optimal=table_solution.is_optimal,
@@ -105,21 +102,33 @@ def save_solution(db: Session, table_id: int, table_solution: schemas.InputSolut
         session.commit()
         session.refresh(solution)
 
-        for key, value in table_solution.roots.items():
-            supplier_id, consumer_id = key
-            amount, epsilon = value
+        solution_roots = []
+        for root in table_solution.roots:
+            supplier_id = session.query(models.Participant).filter_by(
+                transport_table_id=table_id,
+                line_id=root['supplier_id'],
+                is_supplier=True,
+            ).one().id
+            consumer_id = session.query(models.Participant).filter_by(
+                transport_table_id=table_id,
+                line_id=root['consumer_id'],
+                is_supplier=False,
+            ).one().id
 
-            root = session.query(models.Root).filter_by(
+            base_root = session.query(models.Root).filter_by(
                 supplier_id=supplier_id,
                 consumer_id=consumer_id,
                 transport_table_id=table_id
             ).one()
 
             solution_root = models.SolutionRoot(
-                amount=amount,
-                epsilon=epsilon,
+                amount=root['amount'],
+                epsilon=root['epsilon'],
                 solution_id=solution.id,
-                root=root.id
+                root=base_root,
             )
-            print(root)
-            print(solution_root)
+            solution_roots.append(solution_root)
+
+        session.add_all(solution_roots)
+        session.commit()
+        return solution.id
