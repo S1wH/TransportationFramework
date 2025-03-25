@@ -1,6 +1,7 @@
 from typing import Optional, List, Type
 from sqlalchemy.orm import Session
 from backend import models, schemas, utils
+from backend.models import TableSolution
 
 
 def get_tables(db: Session) -> List[Type[schemas.TransportTable]]:
@@ -57,7 +58,7 @@ def create_table(db: Session, table: schemas.TransportTable) -> int:
                     capacity=table.capacities[row_idx][col_idx] if table.capacities else None,
                     restriction=table.restrictions[(row_idx, col_idx)][0] +
                                 str(table.restrictions[(row_idx, col_idx)][1])
-                                if (row_idx, col_idx) in table.restrictions.keys() else None,
+                                if table.restrictions and (row_idx, col_idx) in table.restrictions.keys() else None,
                     price=item,
                     supplier_id=suppliers[row_idx].id,
                     consumer_id=consumers[col_idx].id,
@@ -75,8 +76,8 @@ def create_basic_plan(db: Session, table_id: int, mode: int) -> schemas.Solution
 
     t = utils.get_transport_table_info(db, table)
 
-    solution, price = t.create_basic_plan(mode)
-    return schemas.Solution(price=price, transition_matrix=solution, is_optimal=False)
+    roots, price = t.create_basic_plan(mode)
+    return schemas.Solution(price=price, is_optimal=False, roots=roots)
 
 
 def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Solution:
@@ -91,7 +92,7 @@ def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Soluti
     return schemas.Solution(price=price, transition_matrix=solution, is_optimal=True)
 
 
-def save_solution(db: Session, table_id: int, table_solution: schemas.InputSolution) -> int:
+def save_solution(db: Session, table_id: int, table_solution: schemas.Solution) -> int:
     with db as session:
         solution = models.TableSolution(
             is_optimal=table_solution.is_optimal,
@@ -132,3 +133,20 @@ def save_solution(db: Session, table_id: int, table_solution: schemas.InputSolut
         session.add_all(solution_roots)
         session.commit()
         return solution.id
+
+
+def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optional[schemas.Solution]:
+    with (db as session):
+        last_plan = session.query(models.TableSolution).filter_by(
+            table_id=table_id, is_optimal=is_optimal
+        ).order_by(TableSolution.id.desc()).first()
+
+        if not last_plan:
+            return None
+
+        last_plan = schemas.Solution(
+            price=last_plan.price,
+            is_optimal=last_plan.is_optimal,
+            roots=utils.get_root_info(last_plan.roots),
+        )
+    return last_plan

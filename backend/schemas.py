@@ -13,10 +13,4 @@ class TransportTable(BaseModel):
 class Solution(BaseModel):
     price: float | int
     is_optimal: bool
-    transition_matrix: List[List[str]]
-
-
-class InputSolution(BaseModel):
-    price: float | int
-    is_optimal: bool
     roots: List[Dict[str, int | float]]

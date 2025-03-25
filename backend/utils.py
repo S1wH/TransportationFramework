@@ -1,5 +1,7 @@
 import numpy as np
+from typing import Set
 from backend import models
+from backend.models import SolutionRoot
 from backend.transportation_lib.transport_table import TransportTable
 from sqlalchemy.orm import Session
 
@@ -31,3 +33,17 @@ def get_transport_table_info(db: Session, table: models.TransportTable) -> Trans
                 restrictions[(supplier_id, consumer_id)] = (restriction[0], int(restriction[1:]))
 
     return TransportTable(list(suppliers), list(consumers), price_matrix, restrictions, capacities)
+
+
+def get_root_info(roots: Set[SolutionRoot]):
+    transition_roots = []
+    for root in roots:
+        base_root = root.root
+        transition_root = {
+            'supplier_id': base_root.supplier.line_id,
+            'consumer_id': base_root.supplier.line_id,
+            'amount': root.amount,
+            'epsilon': root.epsilon,
+        }
+        transition_roots.append(transition_root)
+    return transition_roots

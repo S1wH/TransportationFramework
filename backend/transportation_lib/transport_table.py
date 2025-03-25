@@ -1,7 +1,7 @@
 import operator
 import copy
 from collections import deque
-from typing import Optional, List
+from typing import Optional, List, Dict
 from abc import ABC
 from prettytable import PrettyTable
 from .transport_errors import (InvalidMatrixDimension, InvalidPriceValueError, InvalidAmountGood,
@@ -635,12 +635,19 @@ class TransportTable:
             if self.__solution[-1][-1].repr == consumer_exp == supplier_epx:
                 self.__collapse_transport_matrix()
 
-    def __create_transition_matrix(self, matrix: npt.NDArray[Root]) -> List[List[str]]:
-        transition_matrix = [['0' for _ in range(self.__consumers_amount)] for _ in range(self.__suppliers_amount)]
+    def __create_transition_matrix(self, matrix: npt.NDArray[Root]) -> List[Dict[str, int | float]]:
+        transition_roots = []
         for supplier_idx, line in enumerate(matrix):
             for consumer_idx, item in enumerate(line):
-                transition_matrix[supplier_idx][consumer_idx] = item.repr
-        return transition_matrix
+                if item.repr != '0':
+                    transition_root = {
+                        'supplier_id': supplier_idx,
+                        'consumer_id': consumer_idx,
+                        'amount': item.amount,
+                        'epsilon': item.epsilon
+                    }
+                    transition_roots.append(transition_root)
+        return transition_roots
 
     def get_optimal_solution_price(self) -> int | float:
         price = 0
@@ -649,7 +656,7 @@ class TransportTable:
                 price += root.amount * root.price
         return price
 
-    def create_basic_plan(self, mode: int=1) -> tuple[List[List[str]], int | float]:
+    def create_basic_plan(self, mode: int=1) -> tuple[List[Dict[str, int | float]], int | float]:
         res = self.check_table_balance()
         if not res:
             self.__make_table_balanced()
@@ -668,7 +675,7 @@ class TransportTable:
         self.__restore_price_matrix_values()
         return transition_matrix, basic_plan[1]
 
-    def create_optimal_plan(self) -> Optional[tuple[List[List[str]], int | float]]:
+    def create_optimal_plan(self) -> Optional[tuple[List[Dict[str, int | float]], int | float]]:
         self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -694,7 +701,7 @@ class TransportTable:
         transition_matrix = self.__create_transition_matrix(self.__solution)
         return transition_matrix, price
 
-    def solve_capacity_plan(self) -> Optional[tuple[List[List[str]], int | float]]:
+    def solve_capacity_plan(self) -> Optional[tuple[List[Dict[str, int | float]], int | float]]:
         self.__minimum_cost_method()
 
         if self.__check_balance_equations() is False:
