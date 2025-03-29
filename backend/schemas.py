@@ -1,16 +1,15 @@
 from pydantic import BaseModel
-from typing import List, Dict, Tuple
 
 
 class TransportTable(BaseModel):
-    suppliers: List[float | int]
-    consumers: List[float | int]
-    price_matrix: List[List[float | int]]
-    restrictions: dict[tuple[int, int], tuple[str, int]] = None
+    suppliers: list[float | int]
+    consumers: list[float | int]
+    price_matrix: list[list[float | int]]
+    restrictions: dict[str, str] = None
     capacities: list[list[float | int]] = None
 
 
 class Solution(BaseModel):
     price: float | int
     is_optimal: bool
-    roots: List[Dict[str, int | float]]
+    roots: list[dict[str, int | float]]

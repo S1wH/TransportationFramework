@@ -1,17 +1,47 @@
-from typing import Optional, List, Type
+from typing import Optional
+from sqlalchemy import ColumnElement
 from sqlalchemy.orm import Session
 from backend import models, schemas, utils
-from backend.models import TableSolution
 
 
-def get_tables(db: Session) -> List[Type[schemas.TransportTable]]:
-    tables = db.query(models.TransportTable).all()
+def get_tables(db: Session) -> list[schemas.TransportTable]:
+    tables = []
+    for table_id in db.query(models.TransportTable.id).distinct():
+        table_schema = get_table(db, table_id[0])
+        tables.append(table_schema)
     return tables
 
 
-def get_table(db: Session, table_id: int) -> Optional[Type[schemas.TransportTable]]:
-    table = db.get(models.TransportTable, table_id)
-    return table
+def get_table(db: Session, table_id: int | ColumnElement[int]) -> Optional[schemas.TransportTable]:
+    with db as session:
+        table = session.get(models.TransportTable, table_id)
+        suppliers = session.query(models.Participant).filter_by(
+            transport_table_id=table_id, is_supplier=True).order_by('line_id')
+        consumers = session.query(models.Participant).filter_by(
+            transport_table_id=table_id, is_supplier=False).order_by('line_id')
+        roots = table.roots
+        price_matrix = [[0 for _ in range(consumers.count())] for _ in range(suppliers.count())]
+        capacities = [[0 for _ in range(consumers.count())] for _ in range(suppliers.count())
+                      ] if list(roots)[0].capacity else []
+        restrictions = {}
+        for root in roots:
+            supplier_id = root.supplier.line_id
+            consumer_id = root.consumer.line_id
+            price_matrix[supplier_id][consumer_id] = root.price
+
+            if root.restriction:
+                restrictions[f'{supplier_id}, {consumer_id}'] = root.restriction
+
+            if root.capacity:
+                capacities[supplier_id][consumer_id] = root.capacity
+        table_scheme = schemas.TransportTable(
+            suppliers=[supplier.goods_amount for supplier in suppliers],
+            consumers=[consumer.goods_amount for consumer in consumers],
+            price_matrix=price_matrix,
+            restrictions=restrictions,
+            capacities=capacities,
+        )
+    return table_scheme
 
 
 def create_table(db: Session, table: schemas.TransportTable) -> int:
@@ -54,11 +84,11 @@ def create_table(db: Session, table: schemas.TransportTable) -> int:
         roots = []
         for row_idx, row in enumerate(table.price_matrix):
             for col_idx, item in enumerate(row):
+                restriction_key = f'{row_idx}, {col_idx}'
                 session_root = models.Root(
                     capacity=table.capacities[row_idx][col_idx] if table.capacities else None,
-                    restriction=table.restrictions[(row_idx, col_idx)][0] +
-                                str(table.restrictions[(row_idx, col_idx)][1])
-                                if table.restrictions and (row_idx, col_idx) in table.restrictions.keys() else None,
+                    restriction=table.restrictions[restriction_key]
+                                if table.restrictions and restriction_key in table.restrictions.keys() else None,
                     price=item,
                     supplier_id=suppliers[row_idx].id,
                     consumer_id=consumers[col_idx].id,
@@ -85,11 +115,11 @@ def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Soluti
 
     t = utils.get_transport_table_info(db, table)
     if t.has_capacities:
-        solution, price = t.solve_capacity_plan()
+        roots, price = t.solve_capacity_plan()
     else:
         t.create_basic_plan(mode)
-        solution, price = t.create_optimal_plan()
-    return schemas.Solution(price=price, transition_matrix=solution, is_optimal=True)
+        roots, price = t.create_optimal_plan()
+    return schemas.Solution(price=price, is_optimal=True, roots=roots)
 
 
 def save_solution(db: Session, table_id: int, table_solution: schemas.Solution) -> int:
@@ -139,7 +169,7 @@ def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optiona
     with (db as session):
         last_plan = session.query(models.TableSolution).filter_by(
             table_id=table_id, is_optimal=is_optimal
-        ).order_by(TableSolution.id.desc()).first()
+        ).order_by(models.TableSolution.id.desc()).first()
 
         if not last_plan:
             return None
