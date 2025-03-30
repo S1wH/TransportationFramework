@@ -86,8 +86,8 @@ class Root:
 
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
-                 price_matrix: npt.NDArray[npt.NDArray[float]], restrictions: dict[tuple[int, int], tuple[str, int]]={},
-                 capacities: list[list[float | int]]=None) -> None:
+                 price_matrix: npt.NDArray[npt.NDArray[float]], restrictions: dict[tuple[int, int],
+            tuple[str, int]]=None, capacities: list[list[float | int]]=None) -> None:
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
         self.__suppliers = np.array([Supplier(supplier, supplier_id)
@@ -487,9 +487,8 @@ class TransportTable:
                 redistr_val = root.capacity - (root.amount + (root.epsilon * EPSILON_VAL))
             else:
                 redistr_val = root.amount + (root.epsilon * EPSILON_VAL)
-            if redistr_val < min_value:
-                min_value = redistr_val
 
+            min_value = min(min_value, redistr_val)
         return min_value
 
     def __transportation_redistribution(self, loop: list[tuple[np.int64]], amount: int | float, epsilon: int) -> None:
@@ -553,29 +552,29 @@ class TransportTable:
     def __extend_transport_matrix(self) -> None:
         consumers, suppliers = self.__get_disbalanced_participants()
         self.__consumers_amount += 1
-        new_consumer = Consumer(sum([item[0] for item in consumers.values()]), self.__consumers_amount - 1,
-                                sum([item[1] for item in consumers.values()]))
+        new_consumer = Consumer(sum(item[0] for item in consumers.values()), self.__consumers_amount - 1,
+                                sum(item[1] for item in consumers.values()))
         self.__consumers = np.append(self.__consumers, new_consumer)
         new_consumer_line = np.empty((self.__suppliers_amount, 1), dtype=Root)
         for i in range(self.__suppliers_amount):
             new_consumer_line[i][0] = Root(M_VAL, self.suppliers[i], new_consumer,
-                                           amount=consumers[i][0] if i in consumers.keys() else 0,
-                                           epsilon=consumers[i][1] if i in consumers.keys() else 0,
-                                           representation=str(consumers[i][0]) if i in consumers.keys() else '0',
+                                           amount=consumers[i][0] if i in consumers else 0,
+                                           epsilon=consumers[i][1] if i in consumers else 0,
+                                           representation=str(consumers[i][0]) if i in consumers else '0',
                                            capacity=M_VAL)
         self.__price_matrix = np.concatenate((self.__price_matrix, new_consumer_line), axis=1)
 
         self.__suppliers_amount += 1
-        new_supplier = Supplier(sum([item[0] for item in suppliers.values()]), self.__suppliers_amount - 1,
-                                sum([item[1] for item in suppliers.values()]))
+        new_supplier = Supplier(sum(item[0] for item in suppliers.values()), self.__suppliers_amount - 1,
+                                sum(item[1] for item in suppliers.values()))
         self.__suppliers = np.append(self.__suppliers, new_supplier)
         new_supplier_line = np.empty((1, self.__consumers_amount), dtype=Root)
         for i in range(self.__consumers_amount):
             new_supplier_line[0][i] = Root(M_VAL if i != self.__consumers_amount - 1 else 0,
                                            new_supplier, self.consumers[i],
-                                           amount=suppliers[i][0] if i in suppliers.keys() else 0,
-                                           epsilon=suppliers[i][1] if i in suppliers.keys() else 0,
-                                           representation=str(suppliers[i][0]) if i in suppliers.keys() else '0',
+                                           amount=suppliers[i][0] if i in suppliers else 0,
+                                           epsilon=suppliers[i][1] if i in suppliers else 0,
+                                           representation=str(suppliers[i][0]) if i in suppliers else '0',
                                            capacity=M_VAL)
         self.__price_matrix = np.concatenate((self.price_matrix, new_supplier_line), axis=0)
 
@@ -604,10 +603,10 @@ class TransportTable:
                 for root in supplier_row:
                     if 0 < root.amount < root.capacity:
                         basic_plan_cells.append(root)
-                    elif root.amount == 0 or root.amount == root.capacity:
+                    elif root.amount in (0, root.capacity):
                         reserve_cells.append(root)
-            acyclic_cells, other_cells = find_acyclic_plan(basic_plan_cells, reserve_cells,
-                                                           self.__suppliers_amount, self.__consumers_amount,  used_plans)
+            acyclic_cells, other_cells = find_acyclic_plan(basic_plan_cells, reserve_cells, self.__suppliers_amount,
+                                                           self.__consumers_amount,  used_plans)
 
             supplier_values, consumer_values = self.__fill_conditional_values(acyclic_cells)
 
@@ -617,9 +616,12 @@ class TransportTable:
 
             if np.any(d_values > 0) or np.any(c_values < 0):
                 if np.any(c_values < 0):
-                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'c'], key=lambda x: x[1])[0]
-                elif np.any(d_values > 0):
-                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'd'], key=lambda x: x[1])[0]
+                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'c'],
+                                           key=lambda x: x[1])[0]
+                else:
+                    min_potential = sorted([(key, val) for key, val in potentials.items() if key[2] == 'd'],
+                                           key=lambda x: x[1])[0]
+
                 loop = self.__find_potential_loop(min_potential, acyclic_cells)
                 if not loop:
                     continue

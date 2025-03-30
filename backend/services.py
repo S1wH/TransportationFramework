@@ -166,7 +166,7 @@ def save_solution(db: Session, table_id: int, table_solution: schemas.Solution) 
 
 
 def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optional[schemas.Solution]:
-    with (db as session):
+    with db as session:
         last_plan = session.query(models.TableSolution).filter_by(
             table_id=table_id, is_optimal=is_optimal
         ).order_by(models.TableSolution.id.desc()).first()

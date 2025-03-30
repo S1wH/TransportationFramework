@@ -1,9 +1,9 @@
-import numpy as np
 from typing import Type
+from sqlalchemy.orm import Session
+import numpy as np
 from backend import models
 from backend.models import SolutionRoot
 from backend.transportation_lib.transport_table import TransportTable
-from sqlalchemy.orm import Session
 
 
 def get_transport_table_info(db: Session, table: Type[models.TransportTable]) -> TransportTable:
