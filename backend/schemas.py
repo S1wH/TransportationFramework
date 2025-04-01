@@ -1,12 +1,13 @@
 from pydantic import BaseModel
+from typing import Optional
 
 
 class TransportTable(BaseModel):
     suppliers: list[float | int]
     consumers: list[float | int]
     price_matrix: list[list[float | int]]
-    restrictions: dict[str, str] = None
-    capacities: list[list[float | int]] = None
+    restrictions: Optional[dict[str, str]] = None
+    capacities: Optional[list[list[float | int]]] = None
 
 
 class Solution(BaseModel):

@@ -84,7 +84,7 @@ def create_table(db: Session, table: schemas.TransportTable) -> int:
         roots = []
         for row_idx, row in enumerate(table.price_matrix):
             for col_idx, item in enumerate(row):
-                restriction_key = f'{row_idx}, {col_idx}'
+                restriction_key = f'{row_idx},{col_idx}'
                 session_root = models.Root(
                     capacity=table.capacities[row_idx][col_idx] if table.capacities else None,
                     restriction=table.restrictions[restriction_key]
@@ -110,10 +110,26 @@ def create_basic_plan(db: Session, table_id: int, mode: int) -> schemas.Solution
     return schemas.Solution(price=price, is_optimal=False, roots=roots)
 
 
+def create_basic_plan_unauthorized(table: schemas.TransportTable, mode: int) -> schemas.Solution:
+    t = utils.get_transport_table_info_unauthorized(table)
+    roots, price = t.create_basic_plan(mode)
+    return schemas.Solution(price=price, is_optimal=False, roots=roots)
+
+
 def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Solution:
     table = db.get(models.TransportTable, table_id)
 
     t = utils.get_transport_table_info(db, table)
+    if t.has_capacities:
+        roots, price = t.solve_capacity_plan()
+    else:
+        t.create_basic_plan(mode)
+        roots, price = t.create_optimal_plan()
+    return schemas.Solution(price=price, is_optimal=True, roots=roots)
+
+
+def create_optimal_plan_unauthorized(table: schemas.TransportTable, mode: int) -> schemas.Solution:
+    t = utils.get_transport_table_info_unauthorized(table)
     if t.has_capacities:
         roots, price = t.solve_capacity_plan()
     else:

@@ -18,6 +18,151 @@ type Capacity = {
   value: number;
 };
 
+type Root = {
+  supplier_id: number;
+  consumer_id: number;
+  amount: number;
+  epsilon: number;
+};
+
+type SolutionResponse = {
+  price: number;
+  is_optimal: boolean;
+  roots: Root[];
+};
+
+interface TableComponentProps {
+  tableData: Cell[][];
+  restrictions: Restriction[];
+  capacities: Capacity[];
+  setRestrictions: (restrictions: Restriction[]) => void;
+  setCapacities: (capacities: Capacity[]) => void;
+}
+
+// Restrictions Component
+function Restrictions({ tableData, restrictions, setRestrictions }: TableComponentProps) {
+  const updateRestriction = (index: number, field: keyof Restriction, value: string | number) => {
+    const newRestrictions = [...restrictions];
+    newRestrictions[index] = { ...newRestrictions[index], [field]: value };
+    setRestrictions(newRestrictions);
+  };
+
+  const deleteRestriction = (index: number) => {
+    setRestrictions(restrictions.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="restrictions">
+      <h3>Restrictions</h3>
+      <div className="controls-list">
+        {restrictions.map((restriction, index) => (
+          <div key={index} className="restriction-item">
+            <select
+              value={restriction.cell}
+              onChange={(e) => updateRestriction(index, 'cell', e.target.value)}
+            >
+              {tableData.flat().map((cell) => (
+                <option key={`${cell.row}-${cell.column}`} value={`${cell.row}-${cell.column}`}>
+                  Cell ({cell.row + 1}, {cell.column + 1})
+                </option>
+              ))}
+            </select>
+            <select
+              value={restriction.operator}
+              onChange={(e) => updateRestriction(index, 'operator', e.target.value as '>' | '<')}
+            >
+              <option value=">">&gt;</option>
+              <option value="<">&lt;</option>
+            </select>
+            <input
+              type="number"
+              value={restriction.value}
+              onChange={(e) => updateRestriction(index, 'value', Number(e.target.value))}
+            />
+            <button className="delete-button" onClick={() => deleteRestriction(index)}>
+              ×
+            </button>
+          </div>
+        ))}
+      </div>
+      <button
+        className="add-button"
+        onClick={() => setRestrictions([...restrictions, { cell: '0-0', operator: '>', value: 0 }])}
+      >
+        Add Restriction
+      </button>
+    </div>
+  );
+}
+
+// Capacities Component
+function Capacities({ tableData, capacities, setCapacities }: TableComponentProps) {
+  const allCells = tableData.flat();
+  const occupiedCells = new Set(capacities.map((c) => c.cell));
+
+  const updateCapacity = (index: number, field: keyof Capacity, value: string | number) => {
+    const newCapacities = [...capacities];
+    newCapacities[index] = { ...newCapacities[index], [field]: value };
+    setCapacities(newCapacities);
+  };
+
+  const addCapacity = () => {
+    const availableCells = allCells.filter((cell) => !occupiedCells.has(`${cell.row}-${cell.column}`));
+    if (availableCells.length > 0) {
+      setCapacities([...capacities, { cell: `${availableCells[0].row}-${availableCells[0].column}`, value: 0 }]);
+    }
+  };
+
+  const deleteCapacity = (index: number) => {
+    setCapacities(capacities.filter((_, i) => i !== index));
+  };
+
+  return (
+    <div className="capacities">
+      <h3>Capacities</h3>
+      <div className="controls-list">
+        {capacities.map((capacity, index) => {
+          const availableCells = allCells.filter(
+            (cell) =>
+              !occupiedCells.has(`${cell.row}-${cell.column}`) ||
+              `${cell.row}-${cell.column}` === capacity.cell
+          );
+          return (
+            <div key={index} className="capacity-item">
+              <select
+                value={capacity.cell}
+                onChange={(e) => updateCapacity(index, 'cell', e.target.value)}
+              >
+                {availableCells.map((cell) => (
+                  <option key={`${cell.row}-${cell.column}`} value={`${cell.row}-${cell.column}`}>
+                    Cell ({cell.row + 1}, {cell.column + 1})
+                  </option>
+                ))}
+              </select>
+              <input
+                type="number"
+                value={capacity.value}
+                onChange={(e) => updateCapacity(index, 'value', Number(e.target.value))}
+              />
+              <button className="delete-button" onClick={() => deleteCapacity(index)}>
+                ×
+              </button>
+            </div>
+          );
+        })}
+      </div>
+      <button
+        className="add-button"
+        onClick={addCapacity}
+        disabled={allCells.length === capacities.length}
+      >
+        Add Capacity
+      </button>
+    </div>
+  );
+}
+
+// Main App Component
 function App() {
   const [rows, setRows] = useState(3);
   const [cols, setCols] = useState(3);
@@ -26,69 +171,172 @@ function App() {
   const [consumers, setConsumers] = useState<number[]>([]);
   const [restrictions, setRestrictions] = useState<Restriction[]>([]);
   const [capacities, setCapacities] = useState<Capacity[]>([]);
+  const [capacityError, setCapacityError] = useState('');
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [solutionData, setSolutionData] = useState<SolutionResponse | null>(null);
+  const [isSolving, setIsSolving] = useState(false);
+  const [method, setMethod] = useState<'northwest' | 'min_cost' | 'vogel'>('northwest');
 
+  // Load particles.js
   useEffect(() => {
     if (typeof window !== 'undefined') {
       (window as any).particlesJS.load('particles-js', '/particles-config.json', () => {
         console.log('particles.js loaded');
       });
     }
-
     return () => {
-      if ((window as any).pJSDom && (window as any).pJSDom.length) {
+      if ((window as any).pJSDom?.length) {
         (window as any).pJSDom[0].pJS.fn.vendors.destroy();
       }
     };
   }, []);
 
-  const handleCellChange = (rowIndex: number, colIndex: number, value: number | null) => {
-    setTableData(prev => {
+  // Validate capacities
+  useEffect(() => {
+    setCapacityError(
+      capacities.length > 0 && capacities.length !== rows * cols
+        ? 'All cells must have capacities when capacities are defined'
+        : ''
+    );
+  }, [capacities, rows, cols]);
+
+  // Adjust data when table size changes
+  useEffect(() => {
+    const adjustData = (data: any[], maxLength: number) =>
+      data.filter((_, i) => i < maxLength).map((item) => item || 0);
+
+    setSuppliers((prev) => adjustData(prev, rows));
+    setConsumers((prev) => adjustData(prev, cols));
+    setRestrictions((prev) => prev.filter((r) => {
+      const [row, col] = r.cell.split('-').map(Number);
+      return row < rows && col < cols;
+    }));
+    setCapacities((prev) => prev.filter((c) => {
+      const [row, col] = c.cell.split('-').map(Number);
+      return row < rows && col < cols;
+    }));
+  }, [rows, cols]);
+
+  const getSolutionGrid = (): (string | number)[][] => {
+    if (!solutionData?.roots) return Array(rows).fill(Array(cols).fill(0));
+    const grid = Array.from({ length: rows }, () => Array(cols).fill(0));
+    solutionData.roots.forEach((root) => {
+      const { supplier_id: supplierId, consumer_id: consumerId, amount, epsilon } = root;
+      grid[supplierId][consumerId] = epsilon
+        ? `${amount || ''}${epsilon > 0 ? '+' : '-'}${Math.abs(epsilon)}ε`
+        : amount;
+    });
+    return grid;
+  };
+
+  const updateCell = (row: number, col: number, value: number | null) => {
+    setTableData((prev) => {
       const newData = [...prev];
-      newData[rowIndex] = newData[rowIndex] || [];
-      newData[rowIndex][colIndex] = { row: rowIndex, column: colIndex, value };
+      newData[row] = newData[row] || [];
+      newData[row][col] = { row, column: col, value };
       return newData;
     });
   };
 
-  return (
-    <div className={'app dark-theme'}>
-      <div id="particles-js"></div>
-      
-      <header>
-      <h1>Transport Problem Solver</h1>
-    </header>
+  const convertRestrictions = (restrictions: Restriction[]): Record<string, string> =>
+    restrictions.reduce((acc, { cell, operator, value }) => {
+      const [row, col] = cell.split('-').map(Number);
+      acc[`${row}, ${col}`] = `${operator}${value}`;
+      return acc;
+    }, {} as Record<string, string>);
 
-      <div className="controls">
-        <div className="input-group">
-          <label>Suppliers:</label>
-          <input 
-            type="number" 
-            value={rows} 
-            onChange={(e) => setRows(Number(e.target.value))}
-            min={1}
-          />
+  const solvePlan = async (type: 'basic' | 'optimal') => {
+    setIsSolving(true);
+    const priceMatrix = Array.from({ length: rows }, (_, i) =>
+      Array.from({ length: cols }, (_, j) => tableData[i]?.[j]?.value ?? 0)
+    );
+
+    const payload = {
+      suppliers: suppliers.map((s) => s || 0),
+      consumers: consumers.map((c) => c || 0),
+      price_matrix: priceMatrix,
+      restrictions: restrictions.length ? convertRestrictions(restrictions) : null,
+      capacities: capacities.length ? capacities : null,
+      ...(type === 'basic' && { method }),
+    };
+
+    const url = `http://127.0.0.1:8000/tables/create_${type}_plan/`;
+
+    try {
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!response.ok) throw new Error('Failed to solve');
+      const result = await response.json();
+      setSolutionData(result);
+      setIsModalOpen(true);
+    } catch (error) {
+      console.error('Solve error:', error);
+      alert('Error occurred while solving');
+    } finally {
+      setIsSolving(false);
+    }
+  };
+
+  return (
+    <div className="app dark-theme">
+      <div id="particles-js" />
+
+      <div className="user-profile">
+        <div className="profile-avatar">
+          <span>TP</span>
         </div>
-        
-        <div className="input-group">
-          <label>Consumers:</label>
-          <input 
-            type="number" 
-            value={cols} 
-            onChange={(e) => setCols(Number(e.target.value))}
-            min={1}
-          />
+        <div className="profile-menu">
+          <button>Profile</button>
+          <button>Settings</button>
+          <button>Logout</button>
         </div>
       </div>
 
+      <div className="controls-container">
+        <Restrictions tableData={tableData} restrictions={restrictions} setRestrictions={setRestrictions} capacities={capacities} setCapacities={setCapacities} />
+        <Capacities tableData={tableData} capacities={capacities} setCapacities={setCapacities} restrictions={restrictions} setRestrictions={setRestrictions} />
+      </div>
+
       <div className="table-container">
-        <div className="transport-table">
-          <div className="table-header">
-            <div className="corner-cell"></div>
+        <div className="transport-table-wrapper">
+          <div className="table-header" style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}>
+            <div className="corner-cell">
+              <div className="control">
+                <label>Suppliers</label>
+                <div className="number-control">
+                  <button onClick={() => setRows(Math.max(1, rows - 1))}>-</button>
+                  <input
+                    type="number"
+                    value={rows}
+                    onChange={(e) => setRows(Math.max(1, Number(e.target.value)))}
+                    min={1}
+                  />
+                  <button onClick={() => setRows(rows + 1)}>+</button>
+                </div>
+              </div>
+              <div className="control">
+                <label>Consumers</label>
+                <div className="number-control">
+                  <button onClick={() => setCols(Math.max(1, cols - 1))}>-</button>
+                  <input
+                    type="number"
+                    value={cols}
+                    onChange={(e) => setCols(Math.max(1, Number(e.target.value)))}
+                    min={1}
+                  />
+                  <button onClick={() => setCols(cols + 1)}>+</button>
+                </div>
+              </div>
+            </div>
             {Array.from({ length: cols }, (_, i) => (
               <div key={i} className="header-cell">
-                Consumer {i + 1}
-                <input 
-                  type="number" 
+                <div>Consumer {i + 1}</div>
+                <input
+                  type="number"
                   placeholder="Demand"
                   value={consumers[i] || ''}
                   onChange={(e) => {
@@ -102,32 +350,32 @@ function App() {
           </div>
 
           <div className="table-body">
-            {Array.from({ length: rows }, (_, rowIndex) => (
-              <div key={rowIndex} className="table-row">
+            {Array.from({ length: rows }, (_, row) => (
+              <div
+                key={row}
+                className="table-row"
+                style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}
+              >
                 <div className="supplier-cell">
-                  Supplier {rowIndex + 1}
-                  <input 
-                    type="number" 
+                  <div>Supplier {row + 1}</div>
+                  <input
+                    type="number"
                     placeholder="Supply"
-                    value={suppliers[rowIndex] || ''}
+                    value={suppliers[row] || ''}
                     onChange={(e) => {
                       const newSuppliers = [...suppliers];
-                      newSuppliers[rowIndex] = Number(e.target.value);
+                      newSuppliers[row] = Number(e.target.value);
                       setSuppliers(newSuppliers);
                     }}
                   />
                 </div>
-                
-                {Array.from({ length: cols }, (_, colIndex) => (
+                {Array.from({ length: cols }, (_, col) => (
                   <input
-                    key={colIndex}
+                    key={col}
                     type="number"
                     className="table-cell"
-                    value={tableData[rowIndex]?.[colIndex]?.value || ''}
-                    onChange={(e) => {
-                      const value = e.target.value ? parseFloat(e.target.value) : null;
-                      handleCellChange(rowIndex, colIndex, value);
-                    }}
+                    value={tableData[row]?.[col]?.value ?? ''}
+                    onChange={(e) => updateCell(row, col, e.target.value ? Number(e.target.value) : null)}
                   />
                 ))}
               </div>
@@ -136,88 +384,84 @@ function App() {
         </div>
       </div>
 
-      <div className="additional-controls">
-        <div className="restrictions">
-          <h3>Restrictions</h3>
-          {restrictions.map((r, i) => (
-            <div key={i} className="restriction-item">
-              <select 
-                value={r.cell} 
-                onChange={(e) => {
-                  const newRestrictions = [...restrictions];
-                  newRestrictions[i].cell = e.target.value;
-                  setRestrictions(newRestrictions);
-                }}
-              >
-                {tableData.flat().map(cell => (
-                  <option key={`${cell.row}-${cell.column}`} value={`${cell.row}-${cell.column}`}>
-                    Cell ({cell.row + 1}, {cell.column + 1})
-                  </option>
-                ))}
-              </select>
-              <select 
-                value={r.operator}
-                onChange={(e) => {
-                  const newRestrictions = [...restrictions];
-                  newRestrictions[i].operator = e.target.value as '>' | '<';
-                  setRestrictions(newRestrictions);
-                }}
-              >
-                <option value=">">&gt;</option>
-                <option value="<">&lt;</option>
-              </select>
-              <input 
-                type="number" 
-                value={r.value}
-                onChange={(e) => {
-                  const newRestrictions = [...restrictions];
-                  newRestrictions[i].value = Number(e.target.value);
-                  setRestrictions(newRestrictions);
-                }}
-              />
-            </div>
-          ))}
-          <button onClick={() => setRestrictions([...restrictions, { cell: '0-0', operator: '>', value: 0 }])}>
-            Add Restriction
-          </button>
-        </div>
+      {capacityError && <div className="capacity-error">{capacityError}</div>}
 
-        <div className="capacities">
-          <h3>Capacities</h3>
-          {capacities.map((c, i) => (
-            <div key={i} className="capacity-item">
-              <select 
-                value={c.cell} 
-                onChange={(e) => {
-                  const newCapacities = [...capacities];
-                  newCapacities[i].cell = e.target.value;
-                  setCapacities(newCapacities);
-                }}
+      <div className="method-select">
+        <label htmlFor="method">Method for Basic Plan:</label>
+        <select id="method" value={method} onChange={(e) => setMethod(e.target.value as typeof method)}>
+          <option value="northwest">Northwest Corner</option>
+          <option value="min_cost">Minimum Cost</option>
+          <option value="vogel">Vogel's</option>
+        </select>
+      </div>
+
+      <div className="buttons-container">
+        <button
+          className="solve-button"
+          onClick={() => solvePlan('basic')}
+          disabled={isSolving || !!capacityError}
+        >
+          {isSolving ? 'Solving...' : 'Create Basic Plan'}
+        </button>
+        <button
+          className="solve-button"
+          onClick={() => solvePlan('optimal')}
+          disabled={isSolving || !!capacityError}
+        >
+          {isSolving ? 'Solving...' : 'Create Optimal Plan'}
+        </button>
+      </div>
+
+{isModalOpen && solutionData && (
+  <div className="modal">
+    <div className="modal-content">
+      <h2>{solutionData.is_optimal ? 'Optimal' : 'Basic'} Plan Solution</h2>
+      <div className="solution-info">
+        <p>Total Price: {solutionData.price}</p>
+        <p>Is Optimal: {solutionData.is_optimal ? 'Yes' : 'No'}</p>
+      </div>
+
+      <div className="solution-table-container">
+        <div className="solution-table-wrapper">
+          <div
+            className="solution-table-header"
+            style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}
+          >
+            <div className="corner-cell">Solution</div>
+            {Array.from({ length: cols }, (_, i) => (
+              <div key={i} className="header-cell">
+                <div>Consumer {i + 1}</div>
+                <div className="demand-value">{consumers[i] || 0}</div>
+              </div>
+            ))}
+          </div>
+
+          <div className="solution-table-body">
+            {getSolutionGrid().map((row, rowIndex) => (
+              <div
+                key={rowIndex}
+                className="solution-table-row"
+                style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}
               >
-                {tableData.flat().map(cell => (
-                  <option key={`${cell.row}-${cell.column}`} value={`${cell.row}-${cell.column}`}>
-                    Cell ({cell.row + 1}, {cell.column + 1})
-                  </option>
+                <div className="supplier-cell">
+                  <div>Supplier {rowIndex + 1}</div>
+                  <div className="supply-value">{suppliers[rowIndex] || 0}</div>
+                </div>
+                {row.map((value, colIndex) => (
+                  <div key={colIndex} className="solution-cell">{value}</div>
                 ))}
-              </select>
-              <input 
-                type="number" 
-                value={c.value}
-                onChange={(e) => {
-                  const newCapacities = [...capacities];
-                  newCapacities[i].value = Number(e.target.value);
-                  setCapacities(newCapacities);
-                }}
-              />
-            </div>
-          ))}
-          <button onClick={() => setCapacities([...capacities, { cell: '0-0', value: 0 }])}>
-            Add Capacity
-          </button>
+              </div>
+            ))}
+          </div>
         </div>
       </div>
 
-      <button className="solve-button">Solve</button>
+      <div className="modal-buttons">
+        <button onClick={() => setIsModalOpen(false)}>Close</button>
+      </div>
+    </div>
+  </div>
+)}
     </div>
   );
 }
