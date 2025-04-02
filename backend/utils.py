@@ -1,6 +1,7 @@
 from typing import Type
 from sqlalchemy.orm import Session
 import numpy as np
+import hashlib
 from backend import models, schemas
 from backend.models import SolutionRoot
 from backend.transportation_lib.transport_table import TransportTable
@@ -57,3 +58,8 @@ def get_root_info(roots: set[SolutionRoot]) -> list[dict[str, int | float]]:
         }
         transition_roots.append(transition_root)
     return transition_roots
+
+
+def get_password_hash(password: str):
+    password_bytes = password.encode('UTF-8')
+    return hashlib.sha256(password_bytes).hexdigest()

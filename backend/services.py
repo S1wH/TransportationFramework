@@ -4,15 +4,15 @@ from sqlalchemy.orm import Session
 from backend import models, schemas, utils
 
 
-def get_tables(db: Session) -> list[schemas.TransportTable]:
+def get_tables(db: Session, user_id: int) -> list[schemas.TransportTable]:
     tables = []
     for table_id in db.query(models.TransportTable.id).distinct():
-        table_schema = get_table(db, table_id[0])
+        table_schema = get_table(db, table_id[0], user_id)
         tables.append(table_schema)
     return tables
 
 
-def get_table(db: Session, table_id: int | ColumnElement[int]) -> Optional[schemas.TransportTable]:
+def get_table(db: Session, table_id: int | ColumnElement[int], user_id: int) -> Optional[schemas.TransportTable]:
     with db as session:
         table = session.get(models.TransportTable, table_id)
         suppliers = session.query(models.Participant).filter_by(
@@ -40,13 +40,16 @@ def get_table(db: Session, table_id: int | ColumnElement[int]) -> Optional[schem
             price_matrix=price_matrix,
             restrictions=restrictions,
             capacities=capacities,
+            user_id=user_id,
         )
     return table_scheme
 
 
 def create_table(db: Session, table: schemas.TransportTable) -> int:
     with db as session:
-        t_table = models.TransportTable()
+        user = session.get(models.User, table.user_id)
+
+        t_table = models.TransportTable(user_id=user.id)
         session.add(t_table)
         session.commit()
         session.refresh(t_table)
@@ -138,8 +141,12 @@ def create_optimal_plan_unauthorized(table: schemas.TransportTable, mode: int) -
     return schemas.Solution(price=price, is_optimal=True, roots=roots)
 
 
-def save_solution(db: Session, table_id: int, table_solution: schemas.Solution) -> int:
+def save_solution(db: Session, table_id: int, user_id: int, table_solution: schemas.Solution) -> Optional[int]:
     with db as session:
+        user = session.get(models.User, user_id)
+        if not user:
+            return None
+
         solution = models.TableSolution(
             is_optimal=table_solution.is_optimal,
             price=table_solution.price,
@@ -196,3 +203,25 @@ def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optiona
             roots=utils.get_root_info(last_plan.roots),
         )
     return last_plan
+
+
+def user_register(db: Session, user: schemas.User) -> int:
+    with db as session:
+        password_hash = utils.get_password_hash(user.password)
+        user_model = models.User(
+            username=user.username,
+            password=password_hash,
+        )
+        session.add(user_model)
+        session.commit()
+        session.refresh(user_model)
+        return user_model.id
+
+
+def user_login(db: Session, user: schemas.User) -> bool:
+    with db as session:
+        password_to_verify = utils.get_password_hash(user.password)
+        user = session.query(models.User).filter_by(username=user.username, password=password_to_verify).first()
+        if user:
+            return True
+        return False

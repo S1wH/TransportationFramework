@@ -63,6 +63,9 @@ class TransportTable(Base):
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
 
+    user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
+    user: Mapped['User'] = relationship(back_populates='tables')
+
     participants: Mapped[Set['Participant']] = relationship(back_populates='transport_table')
     roots: Mapped[Set['Root']] = relationship(back_populates='transport_table')
     solutions: Mapped[Set['TableSolution']] = relationship(back_populates='transport_table')
@@ -94,3 +97,13 @@ class TableSolution(Base):
     transport_table: Mapped['TransportTable'] = relationship(back_populates='solutions')
 
     roots: Mapped[Set['SolutionRoot']] = relationship(back_populates='solution')
+
+
+class User(Base):
+    __tablename__ = 'users'
+
+    id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
+    username: Mapped[str] = mapped_column(unique=True, index=True)
+    password: Mapped[str] = mapped_column()
+
+    tables: Mapped[Set['TransportTable']] = relationship(back_populates='user')

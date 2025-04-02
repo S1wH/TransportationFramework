@@ -106,7 +106,7 @@ class TransportTable:
 
         self.__validate_table()
 
-        if self.__capacities:
+        if self.__capacities is not None:
             self.__capacities = np.array(self.__capacities)
             self.__validate_capacities()
             for supplier_id, prices in enumerate(price_matrix):
@@ -360,7 +360,7 @@ class TransportTable:
         counter = 0
         supplier_id, consumer_id = self.__get_valid_fogel_root()
         while supplier_id is not None and consumer_id is not None:
-
+            print(supplier_id, consumer_id)
             root = self.price_matrix[supplier_id][consumer_id]
             goods_amount, eps = self.__get_min_cell_value(root)
 
@@ -375,7 +375,7 @@ class TransportTable:
 
             self.__basic_plan[supplier_id][consumer_id].amount = goods_amount
             self.__basic_plan[supplier_id][consumer_id].epsilon = eps
-            self.__basic_plan[supplier_id][consumer_id].repr= create_eps_expression(eps, goods_amount)
+            self.__basic_plan[supplier_id][consumer_id].repr = create_eps_expression(eps, goods_amount)
             counter += 1
             supplier_id, consumer_id = self.__get_valid_fogel_root()
 

@@ -1,6 +1,12 @@
 import { useEffect, useState } from 'react';
 import './App.css';
 
+enum SolveMethods {
+  northwest = 1,
+  min_cost,
+  vogel,
+}
+
 type Cell = {
   row: number;
   column: number;
@@ -260,7 +266,9 @@ function App() {
       ...(type === 'basic' && { method }),
     };
 
-    const url = `http://127.0.0.1:8000/tables/create_${type}_plan/`;
+    const method_type = SolveMethods[method];
+    console.log(method_type);
+    const url = `http://127.0.0.1:8000/tables/create_${type}_plan/?mode=${method_type}`;
 
     try {
       const response = await fetch(url, {
