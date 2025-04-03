@@ -360,7 +360,6 @@ class TransportTable:
         counter = 0
         supplier_id, consumer_id = self.__get_valid_fogel_root()
         while supplier_id is not None and consumer_id is not None:
-            print(supplier_id, consumer_id)
             root = self.price_matrix[supplier_id][consumer_id]
             goods_amount, eps = self.__get_min_cell_value(root)
 
@@ -663,8 +662,9 @@ class TransportTable:
         if not res:
             self.__make_table_balanced()
 
-        for cell, restriction in self.__restrictions.items():
-            self.__put_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
+        if self.__restrictions:
+            for cell, restriction in self.__restrictions.items():
+                self.__put_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
 
         if mode == 1:
             basic_plan = self.__north_western_method()

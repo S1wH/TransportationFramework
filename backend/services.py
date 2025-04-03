@@ -1,6 +1,6 @@
 from typing import Optional
 from sqlalchemy import ColumnElement
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Session, Mapped
 from backend import models, schemas, utils
 
 
@@ -35,6 +35,8 @@ def get_table(db: Session, table_id: int | ColumnElement[int], user_id: int) -> 
             if root.capacity:
                 capacities[supplier_id][consumer_id] = root.capacity
         table_scheme = schemas.TransportTable(
+            id=table.id,
+            name=table.name,
             suppliers=[supplier.goods_amount for supplier in suppliers],
             consumers=[consumer.goods_amount for consumer in consumers],
             price_matrix=price_matrix,
@@ -49,7 +51,7 @@ def create_table(db: Session, table: schemas.TransportTable) -> int:
     with db as session:
         user = session.get(models.User, table.user_id)
 
-        t_table = models.TransportTable(user_id=user.id)
+        t_table = models.TransportTable(user_id=user.id, name=table.name)
         session.add(t_table)
         session.commit()
         session.refresh(t_table)
@@ -188,8 +190,11 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
         return solution.id
 
 
-def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optional[schemas.Solution]:
+def get_table_last_plan(db: Session, table_id: int, user_id: int, is_optimal: bool
+                        ) -> Optional[dict[str, schemas.Solution | schemas.TransportTable]]:
     with db as session:
+        table_schema = get_table(db, table_id, user_id)
+
         last_plan = session.query(models.TableSolution).filter_by(
             table_id=table_id, is_optimal=is_optimal
         ).order_by(models.TableSolution.id.desc()).first()
@@ -202,7 +207,13 @@ def get_table_last_plan(db: Session, table_id: int, is_optimal: bool) -> Optiona
             is_optimal=last_plan.is_optimal,
             roots=utils.get_root_info(last_plan.roots),
         )
-    return last_plan
+
+        output_data = {
+            'table': table_schema,
+            'solution': last_plan
+        }
+
+        return output_data
 
 
 def user_register(db: Session, user: schemas.User) -> int:
@@ -218,10 +229,8 @@ def user_register(db: Session, user: schemas.User) -> int:
         return user_model.id
 
 
-def user_login(db: Session, user: schemas.User) -> bool:
+def user_login(db: Session, user: schemas.User) -> int | Mapped[int]:
     with db as session:
         password_to_verify = utils.get_password_hash(user.password)
         user = session.query(models.User).filter_by(username=user.username, password=password_to_verify).first()
-        if user:
-            return True
-        return False
+        return user.id

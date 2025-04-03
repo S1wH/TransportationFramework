@@ -296,7 +296,7 @@ h1 {
 .profile-avatar {
   width: 40px;
   height: 40px;
-  background: var(--primary);
+  background: #6b48ff;
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -337,6 +337,48 @@ h1 {
 
 .profile-menu button:hover {
   background: rgba(255,255,255,0.05);
+}
+
+.auth-buttons {
+  position: fixed;
+  right: 2rem;
+  top: 1.5rem;
+  z-index: 1200;
+  display: flex;
+  gap: 1rem;
+}
+
+.login-button,
+.register-button {
+  padding: 0.5rem 1rem;
+  background: #6b48ff;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.login-button:hover,
+.register-button:hover {
+  background: #5a3aff;
+}
+
+.back-button {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  font-weight: 500;
+}
+
+.back-button:hover {
+  background: var(--primary-hover);
 }
 
 .solve-button {
@@ -644,4 +686,138 @@ h1 {
   padding-left: 160px;
   border-bottom: 1px solid var(--border);
   position: relative;
+}
+
+.auth-container {
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.auth-container h2 {
+  color: var(--primary);
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.auth-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-container input {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.auth-container button {
+  padding: 0.75rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.auth-container button:hover {
+  background: var(--primary-hover);
+}
+
+.error {
+  color: #ff4757;
+  text-align: center;
+}
+
+.previous-tables {
+  max-width: 800px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.previous-tables h2 {
+  color: var(--primary);
+  margin-bottom: 1.5rem;
+}
+
+.previous-tables ul {
+  list-style: none;
+  padding: 0;
+}
+
+.previous-tables li {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.previous-tables button {
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.previous-tables button:hover {
+  background: var(--primary-hover);
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 15px 25px;
+  background-color: #ff4444;
+  color: white;
+  border-radius: 5px;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateX(100%); /* Initial state: off-screen */
+  opacity: 0; /* Initial state: invisible */
+}
+
+.slide-in {
+  animation: slideIn 0.5s ease-in-out forwards;
+}
+
+.slide-out {
+  animation: slideOut 0.5s ease-in-out forwards;
+}
+
+/* Remove the :not pseudo-class as animations will handle the states */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
 }

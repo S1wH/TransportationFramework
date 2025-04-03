@@ -62,7 +62,7 @@ class TransportTable(Base):
     __tablename__ = 'transport_tables'
 
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
-
+    name: Mapped[str] = mapped_column(unique=True)
     user_id: Mapped[int] = mapped_column(ForeignKey('users.id'))
     user: Mapped['User'] = relationship(back_populates='tables')
 

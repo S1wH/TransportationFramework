@@ -51,13 +51,13 @@ def save_solution(table_id: int, solution:Solution, user_id: int, db: Session = 
 
 
 @router.get('/last_basic_plan/{table_id}', status_code=status.HTTP_200_OK)
-def get_table_last_basic_plan(table_id: int, db: Session = Depends(get_db)):
-    return services.get_table_last_plan(db, table_id, is_optimal=False)
+def get_table_last_basic_plan(table_id: int, user_id: int,  db: Session = Depends(get_db)):
+    return services.get_table_last_plan(db, table_id, user_id, is_optimal=False)
 
 
 @router.get('/last_optimal_plan/{table_id}', status_code=status.HTTP_200_OK)
-def get_table_last_optimal_plan(table_id: int, db: Session = Depends(get_db)):
-    return services.get_table_last_plan(db, table_id, is_optimal=True)
+def get_table_last_optimal_plan(table_id: int, user_id: int, db: Session = Depends(get_db)):
+    return services.get_table_last_plan(db, table_id, user_id, is_optimal=True)
 
 
 @router.post('/register', status_code=status.HTTP_201_CREATED)
@@ -73,12 +73,14 @@ def user_register(user: User, db: Session = Depends(get_db)):
 
 @router.post('/login', status_code=status.HTTP_201_CREATED)
 def user_login(user: User, db: Session = Depends(get_db)):
-    if services.user_login(db, user):
+    try:
+        user_id = services.user_login(db, user)
         return JSONResponse(
-            {'message': 'success'},
+            {'message': 'success', 'user_id': user_id},
             status_code=status.HTTP_200_OK
         )
-    return JSONResponse(
-        {'message': 'Неверный логин или пароль'},
-        status_code=status.HTTP_400_BAD_REQUEST
-    )
+    except AttributeError:
+        return JSONResponse(
+            {'message': 'Неверный логин или пароль'},
+            status_code=status.HTTP_400_BAD_REQUEST
+        )

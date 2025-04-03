@@ -1,7 +1,7 @@
+import hashlib
 from typing import Type
 from sqlalchemy.orm import Session
 import numpy as np
-import hashlib
 from backend import models, schemas
 from backend.models import SolutionRoot
 from backend.transportation_lib.transport_table import TransportTable
