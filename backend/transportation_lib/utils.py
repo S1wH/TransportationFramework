@@ -75,6 +75,7 @@ def generate_table(suppliers_amount: int, consumers_amount: int, balanced: bool=
 
 
 def find_line_penalty(line: npt.NDArray, basic_plan: npt.NDArray[npt.NDArray]) -> int | float:
+
     filtered_array = np.fromiter((root for root in line
                                   if root_validation(root.consumer.goods_amount, root.supplier.goods_amount,
                                                      root.consumer.epsilon, root.supplier.epsilon,
@@ -83,6 +84,8 @@ def find_line_penalty(line: npt.NDArray, basic_plan: npt.NDArray[npt.NDArray]) -
     if len(filtered_array) == 0:
         return 0
     filtered_array.sort()
+    if len(filtered_array) == 1:
+        return M_VAL
     if len(filtered_array) > 1:
         return abs(filtered_array[0].price - filtered_array[1].price)
     return filtered_array[0].price
