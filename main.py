@@ -13,7 +13,7 @@ t1 = TransportTable(
 )
 
 solution, price = t1.create_basic_plan(3)
-print(solution)
+print('1', solution)
 
 # suppliers = [10, 20]  # Поставщики
 # consumers = [15, 15]  # Потребители

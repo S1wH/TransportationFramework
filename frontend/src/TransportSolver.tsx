@@ -229,6 +229,7 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
   const [isSolving, setIsSolving] = useState(false);
   const [method, setMethod] = useState<'northwest' | 'min_cost' | 'vogel'>('northwest');
   const [tableId, setTableId] = useState<number | null>(null);
+  const [tableName, setTableName] = useState<string | null>(null);
   const [notification, setNotification] = useState<string | null>(null);
   const [isNotificationVisible, setIsNotificationVisible] = useState(false);
   const [isLoadingTable, setIsLoadingTable] = useState(true);
@@ -383,6 +384,8 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
     );
 
     const payload = {
+      id: tableId ? tableId : null,
+      name: tableName ? tableName : null,
       suppliers,
       consumers,
       price_matrix: priceMatrix,

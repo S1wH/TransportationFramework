@@ -3,8 +3,8 @@ from pydantic import BaseModel
 
 
 class TransportTable(BaseModel):
-    id: int
-    name: str
+    id: Optional[int]
+    name: Optional[str]
     suppliers: list[float | int]
     consumers: list[float | int]
     price_matrix: list[list[float | int]]

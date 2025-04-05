@@ -1,4 +1,3 @@
-import operator
 import copy
 from collections import deque
 from typing import Optional, List, Dict
@@ -288,6 +287,7 @@ class TransportTable:
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
                 self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[supplier_id][consumer_id])
+
         consumer_id = 0
         supplier_id = 0
         cost = 0
@@ -350,21 +350,72 @@ class TransportTable:
 
         return self.__basic_plan, cost
 
-    def __calculate_penalty(self, line, is_row=True):
-        """
-        Вычисляет штраф для строки или столбца.
-        Штраф — разница между двумя наименьшими стоимостями среди доступных ячеек.
-        """
-        available_cells = [cell for cell in line if self.is_cell_available(cell)]
-        if not available_cells:
-            return 0
-        if len(available_cells) == 1:
-            return available_cells[0].price
-        sorted_cells = sorted(available_cells, key=lambda x: x.price)
-        return sorted_cells[1].price - sorted_cells[0].price
+    def __vogel_method(self) -> tuple[npt.NDArray[Root], int | float]:
+        self.__basic_plan = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
+        for supplier_id in range(self.__suppliers_amount):
+            for consumer_id in range(self.__consumers_amount):
+                self.__basic_plan[supplier_id][consumer_id] = copy.copy(self.price_matrix[supplier_id][consumer_id])
 
-    def is_cell_available(self, cell):
-        if cell.supplier.goods_amount <= 0 or cell.consumer.goods_amount <= 0:
+        cost = 0
+        counter = 0
+
+        while True:
+            line_type, line_index = self.__get_max_penalty_line()
+            if line_index is None:
+                break
+            line = self.__basic_plan[line_index] if line_type == 'row' else self.__basic_plan[:, line_index]
+            root = self.__get_min_cost_cell(line)
+            if not root:
+                break
+
+            supplier_idx = root.supplier.id
+            consumer_idx = root.consumer.id
+
+            if hasattr(root, 'capacity') and root.capacity:
+                amount = min(root.supplier.goods_amount, root.consumer.goods_amount, root.capacity)
+            else:
+                amount = min(root.supplier.goods_amount, root.consumer.goods_amount)
+
+            if root.consumer.goods_amount == root.supplier.goods_amount:
+                eps = min(root.consumer.epsilon, root.supplier.epsilon)
+            elif root.consumer.goods_amount == 0 and root.consumer.epsilon > root.supplier.epsilon:
+                eps = min(root.consumer.epsilon, root.supplier.epsilon)
+            elif root.supplier.goods_amount == 0 and root.supplier.epsilon < root.consumer.epsilon:
+                eps = min(root.consumer.epsilon, root.supplier.epsilon)
+            else:
+                eps = max(root.consumer.epsilon, root.supplier.epsilon)
+
+            self.__basic_plan[supplier_idx][consumer_idx].amount = amount
+
+            root.supplier.goods_amount -= amount
+            root.consumer.goods_amount -= amount
+            root.supplier.epsilon -= eps
+            root.consumer.epsilon -= eps
+
+            self.__basic_plan[root.supplier.id][root.consumer.id].amount = amount
+            self.__basic_plan[root.supplier.id][root.consumer.id].epsilon = eps
+            self.__basic_plan[root.supplier.id][root.consumer.id].repr = create_eps_expression(eps, amount)
+
+            cost += root.price * amount
+            counter += 1
+
+        if counter < self.__consumers_amount + self.__suppliers_amount - 1:
+            self.__restore_price_matrix_values()
+            self.__epsilon_modify_table()
+            return self.__vogel_method()
+
+        return self.__basic_plan, cost
+
+    def __is_cell_available(self, cell: Root) -> bool:
+        supplier_amount = cell.supplier.goods_amount
+        consumer_amount = cell.consumer.goods_amount
+        supplier_eps = cell.supplier.epsilon
+        consumer_eps = cell.consumer.epsilon
+        if supplier_amount <= 0 and consumer_amount <= 0 and (supplier_eps <= 0 or consumer_eps <= 0):
+            return False
+        if (supplier_amount <= 0 or cell.consumer.goods_amount <= 0) and supplier_eps <= 0 and consumer_eps <= 0:
+            return False
+        if (supplier_amount <= 0 and supplier_eps <= 0) or (consumer_amount <= 0 and consumer_eps <= 0):
             return False
         if self.__restrictions and (cell.supplier.id, cell.consumer.id) in self.__restrictions:
             restriction = self.__restrictions[(cell.supplier.id, cell.consumer.id)]
@@ -374,18 +425,23 @@ class TransportTable:
                 return False
         return True
 
-    def __get_max_penalty_line(self):
-        """
-        Находит строку или столбец с максимальным штрафом.
-        Возвращает тип ('row' или 'col') и индекс.
-        """
+    def __calculate_penalty(self, line: npt.NDArray[Root]) -> int:
+        available_cells = [cell for cell in line if self.__is_cell_available(cell)]
+        if not available_cells:
+            return 0
+        if len(available_cells) == 1:
+            return available_cells[0].price
+        sorted_cells = sorted(available_cells, key=lambda x: x.price)
+        return sorted_cells[1].price - sorted_cells[0].price
+
+    def __get_max_penalty_line(self) -> tuple[Optional[str], Optional[int]]:
         row_penalties = [
-            (i, self.__calculate_penalty(self.__price_matrix[i], is_row=True))
-            for i in range(self.__suppliers_amount) if self.__suppliers[i].goods_amount > 0
+            (i, self.__calculate_penalty(self.__basic_plan[i]))
+            for i in range(self.__suppliers_amount) if self.__basic_plan[i][0].supplier.goods_amount > 0 or self.__basic_plan[i][0].supplier.epsilon > 0
         ]
         col_penalties = [
-            (j, self.__calculate_penalty(self.__price_matrix[:, j], is_row=False))
-            for j in range(self.__consumers_amount) if self.__consumers[j].goods_amount > 0
+            (j, self.__calculate_penalty(self.__basic_plan[:, j]))
+            for j in range(self.__consumers_amount) if self.__basic_plan[0][j].consumer.goods_amount > 0 or self.__basic_plan[0][j].consumer.epsilon > 0
         ]
 
         max_row = max(row_penalties, key=lambda x: x[1], default=(None, 0))
@@ -397,76 +453,11 @@ class TransportTable:
             return 'col', max_col[0]
         return None, None
 
-    def __get_min_cost_cell(self, line):
-        """
-        Находит ячейку с минимальной стоимостью среди доступных в строке или столбце.
-        """
-        available_cells = [cell for cell in line if self.is_cell_available(cell)]
+    def __get_min_cost_cell(self, line: npt.NDArray[Root]) -> Optional[Root]:
+        available_cells = [cell for cell in line if self.__is_cell_available(cell)]
         if not available_cells:
             return None
         return min(available_cells, key=lambda x: x.price)
-
-    def __vogel_method(self):
-        """
-        Реализация метода Фогеля для создания базисного плана.
-        Возвращает матрицу решений и общую стоимость.
-        """
-        total_cost = 0
-        allocated_cells = []
-
-        # Инициализируем self.__basic_plan копией self.__price_matrix
-        for i in range(self.__suppliers_amount):
-            for j in range(self.__consumers_amount):
-                self.__basic_plan[i][j] = Root(
-                    self.__price_matrix[i][j].price,
-                    self.__suppliers[i],
-                    self.__consumers[j]
-                )
-                if hasattr(self.__price_matrix[i][j], 'capacity'):
-                    self.__basic_plan[i][j].capacity = self.__price_matrix[i][j].capacity
-
-        while True:
-            line_type, line_index = self.__get_max_penalty_line()
-            if line_index is None:
-                break
-
-            line = self.__price_matrix[line_index] if line_type == 'row' else self.__price_matrix[:, line_index]
-            cell = self.__get_min_cost_cell(line)
-            if not cell:
-                continue
-
-            # Определяем количество груза
-            supplier_idx = cell.supplier.id
-            consumer_idx = cell.consumer.id
-            if hasattr(cell, 'capacity') and cell.capacity:
-                amount = min(cell.supplier.goods_amount, cell.consumer.goods_amount, cell.capacity)
-            else:
-                amount = min(cell.supplier.goods_amount, cell.consumer.goods_amount)
-
-            # Обновляем basic_plan и solution
-            self.__basic_plan[supplier_idx][consumer_idx].amount = amount
-            self.__solution[supplier_idx][consumer_idx] = amount
-
-            # Обновляем запасы и потребности
-            cell.supplier.goods_amount -= amount
-            cell.consumer.goods_amount -= amount
-            total_cost += cell.price * amount
-            allocated_cells.append((supplier_idx, consumer_idx))
-
-        # Обработка вырожденности
-        required_cells = self.__suppliers_amount + self.__consumers_amount - 1
-        if len(allocated_cells) < required_cells:
-            for i in range(self.__suppliers_amount):
-                for j in range(self.__consumers_amount):
-                    if (i, j) not in allocated_cells and self.is_cell_available(self.__price_matrix[i][j]):
-                        self.__basic_plan[i][j].amount = 0  # Эпсилон как нулевое значение
-                        allocated_cells.append((i, j))
-                        if len(allocated_cells) >= required_cells:
-                            break
-                if len(allocated_cells) >= required_cells:
-                    break
-
-        return self.__solution, total_cost
 
     def __fill_conditional_values(self, filled_cells: list[tuple[int, int]]=None
                                   ) -> tuple[npt.NDArray[np.float16], npt.NDArray[np.float16]]:
