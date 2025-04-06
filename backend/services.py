@@ -170,7 +170,7 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
                 line_id=root['consumer_id'],
                 is_supplier=False,
             ).one().id
-
+            print(supplier_id, consumer_id, root['amount'], root['epsilon'])
             base_root = session.query(models.Root).filter_by(
                 supplier_id=supplier_id,
                 consumer_id=consumer_id,

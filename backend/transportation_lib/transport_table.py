@@ -1,51 +1,57 @@
 import copy
+import numpy as np
+import numpy.typing as npt
 from collections import deque
-from typing import Optional, List, Dict
+from typing import Optional
 from abc import ABC
 from prettytable import PrettyTable
 from .transport_errors import (InvalidMatrixDimension, InvalidPriceValueError, InvalidAmountGood,
                                InvalidRestrictionValue, InvalidRestrictionIndices, InvalidRestrictionSymbol,
                                InvalidCapacityValue, InvalidCapacitiesDimension)
-from .utils import *
+from .utils import create_eps_expression, root_validation, M_VAL, EPSILON_VAL, find_acyclic_plan, get_all_indices
 
 
 class Participant(ABC):
-    def __init__(self, goods_amount: int | float, obj_id: int, epsilon: int=0) -> None:
-        self.goods_amount = goods_amount
-        self.real_amount = goods_amount
+    def __init__(self, goods_amount: int | float, obj_id: int, epsilon: int = 0) -> None:
+        self.goods_amount = float(goods_amount)
+        self.real_amount = float(goods_amount)
         self.epsilon = epsilon
         self.real_epsilon = epsilon
         self.id = obj_id
 
-    def __lt__(self, other) -> bool:
+    def __compare(self, other, operator: str) -> bool:
         if isinstance(other, Participant):
-            return self.goods_amount < other.goods_amount
-        return self.goods_amount < other
+            value = other.goods_amount
+        else:
+            value = other
 
-    def __le__(self, other) -> bool:
-        if isinstance(other, Participant):
-            return self.goods_amount <= other.goods_amount
-        return self.goods_amount <= other
+        comparisons = {
+            '<': lambda x, y: x < y,
+            '<=': lambda x, y: x <= y,
+            '>': lambda x, y: x > y,
+            '>=': lambda x, y: x >= y,
+            '==': lambda x, y: x == y,
+            '!=': lambda x, y: x != y
+        }
+        return comparisons[operator](self.goods_amount, value)
 
-    def __gt__(self, other) -> bool:
-        if isinstance(other, Participant):
-            return self.goods_amount > other.goods_amount
-        return self.goods_amount > other
+    def __lt__(self, other):
+        return self.__compare(other, '<')
 
-    def __ge__(self, other) -> bool:
-        if isinstance(other, Participant):
-            return self.goods_amount >= other.goods_amount
-        return self.goods_amount >= other
+    def __le__(self, other):
+        return self.__compare(other, '<=')
 
-    def __eq__(self, other) -> bool:
-        if isinstance(other, Participant):
-            return self.goods_amount == other.goods_amount
-        return self.goods_amount == other
+    def __gt__(self, other):
+        return self.__compare(other, '>')
+
+    def __ge__(self, other):
+        return self.__compare(other, '>=')
+
+    def __eq__(self, other):
+        return self.__compare(other, '==')
 
     def __ne__(self, other):
-        if isinstance(other, Participant):
-            return self.goods_amount != other.goods_amount
-        return self.goods_amount != other
+        return self.__compare(other, '!=')
 
 
 class Consumer(Participant):
@@ -57,32 +63,43 @@ class Supplier(Participant):
 
 
 class Root:
-    def __init__(self, price: int | float, supplier: Supplier, consumer: Consumer, amount=0, epsilon=0,
-                 representation='0', capacity=None) -> None:
+    def __init__(self, price: int | float, supplier: Supplier, consumer: Consumer, amount: int = 0.0, epsilon: int=0,
+                 representation: str = '0', capacity: Optional[int] = None) -> None:
         self.capacity = capacity
-        self.price = price
+        self.price = float(price)
         self.epsilon = epsilon
         self.amount = amount
         self.supplier = supplier
         self.consumer = consumer
         self.repr = representation
 
+    def __compare_price(self, other, operator: str) -> bool:
+        value = other.price if hasattr(other, 'price') else other
+        comparisons = {
+            '<': lambda x, y: x < y,
+            '<=': lambda x, y: x <= y,
+            '>': lambda x, y: x > y,
+            '>=': lambda x, y: x >= y,
+            '==': lambda x, y: x == y
+        }
+        return comparisons[operator](self.price, value)
+
     def __lt__(self, other):
-        return self.price < other.price
+        return self.__compare_price(other, '<')
 
     def __le__(self, other):
-        return self.price <= other.price
+        return self.__compare_price(other, '<=')
 
     def __gt__(self, other):
-        return self.price > other.price
+        return self.__compare_price(other, '>')
 
     def __ge__(self, other):
-        return self.price >= other.price
+        return self.__compare_price(other, '>=')
 
     def __eq__(self, other):
         if not hasattr(other, 'price'):
             return self.repr == other
-        return self.price == other.price
+        return self.__compare_price(other, '==')
 
     def __copy__(self):
         return Root(self.price, self.supplier, self.consumer, self.amount, self.epsilon, self.repr, self.capacity)
@@ -91,14 +108,15 @@ class Root:
 class TransportTable:
     def __init__(self, suppliers: list[float | int], consumers: list[float | int],
                  price_matrix: npt.NDArray[npt.NDArray[float]], restrictions: dict[tuple[int, int],
-            tuple[str, int]]=None, capacities: list[list[float | int]]=None) -> None:
+            tuple[str, int]] = None, capacities: list[list[float | int]] = None) -> None:
         self.__suppliers_amount = len(suppliers)
         self.__consumers_amount = len(consumers)
         self.__suppliers = np.array([Supplier(supplier, supplier_id)
                                      for supplier_id, supplier in enumerate(suppliers)], dtype=Supplier)
         self.__consumers = np.array([Consumer(consumer, consumer_id)
                                      for consumer_id, consumer in enumerate(consumers)], dtype=Consumer)
-        self.__restrictions = restrictions
+
+        self.__restrictions = restrictions or {}
         self.__price_matrix = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         self.__capacities = capacities
 
@@ -174,20 +192,15 @@ class TransportTable:
         if self.__capacities is not None:
             available_capacity = root.capacity - self.__basic_plan[root.supplier.id][root.consumer.id].amount
             min_goods = min(root.supplier.goods_amount, root.consumer.goods_amount, available_capacity)
-            if min_goods == root.supplier.goods_amount:
-                eps = root.supplier.epsilon
-            elif min_goods == root.consumer.goods_amount:
-                eps = root.consumer.epsilon
-            else:
-                eps = 0
-            return min_goods, eps
-        else:
-            if root.consumer.goods_amount < root.supplier.goods_amount:
-                return root.consumer.goods_amount, root.consumer.epsilon
-            elif root.consumer.goods_amount > root.supplier.goods_amount:
-                return root.supplier.goods_amount, root.supplier.epsilon
-            else:
-                return root.supplier.goods_amount, min(root.supplier.epsilon, root.consumer.epsilon)
+            return (min_goods,
+                    root.supplier.epsilon if min_goods == root.supplier.goods_amount else
+                    root.consumer.epsilon if min_goods == root.consumer.goods_amount else 0)
+
+        if root.consumer.goods_amount < root.supplier.goods_amount:
+            return root.consumer.goods_amount, root.consumer.epsilon
+        if root.consumer.goods_amount > root.supplier.goods_amount:
+            return root.supplier.goods_amount, root.supplier.epsilon
+        return root.supplier.goods_amount, min(root.supplier.epsilon, root.consumer.epsilon)
 
     def __validate_capacities(self) -> None:
         if (self.__capacities.shape[0] != self.__suppliers_amount or
@@ -233,7 +246,7 @@ class TransportTable:
                     raise InvalidRestrictionValue(restriction[1], (0,
                                                                    min(consumer_value, supplier_value).real_amount))
 
-    def __make_table_balanced(self) -> None:
+    def __balance_table(self) -> None:
         goods = np.vectorize(lambda x: x.goods_amount)
         total_suppliers_goods = np.sum(goods(self.suppliers))
         total_consumers_goods = np.sum(goods(self.consumers))
@@ -421,7 +434,7 @@ class TransportTable:
             restriction = self.__restrictions[(cell.supplier.id, cell.consumer.id)]
             if restriction[0] == '>' and cell.amount <= restriction[1]:
                 return False
-            elif restriction[0] == '<' and cell.amount >= restriction[1]:
+            if restriction[0] == '<' and cell.amount >= restriction[1]:
                 return False
         return True
 
@@ -437,11 +450,13 @@ class TransportTable:
     def __get_max_penalty_line(self) -> tuple[Optional[str], Optional[int]]:
         row_penalties = [
             (i, self.__calculate_penalty(self.__basic_plan[i]))
-            for i in range(self.__suppliers_amount) if self.__basic_plan[i][0].supplier.goods_amount > 0 or self.__basic_plan[i][0].supplier.epsilon > 0
+            for i in range(self.__suppliers_amount) if self.__basic_plan[i][0].supplier.goods_amount > 0
+                                                       or self.__basic_plan[i][0].supplier.epsilon > 0
         ]
         col_penalties = [
             (j, self.__calculate_penalty(self.__basic_plan[:, j]))
-            for j in range(self.__consumers_amount) if self.__basic_plan[0][j].consumer.goods_amount > 0 or self.__basic_plan[0][j].consumer.epsilon > 0
+            for j in range(self.__consumers_amount) if self.__basic_plan[0][j].consumer.goods_amount > 0
+                                                       or self.__basic_plan[0][j].consumer.epsilon > 0
         ]
 
         max_row = max(row_penalties, key=lambda x: x[1], default=(None, 0))
@@ -449,7 +464,7 @@ class TransportTable:
 
         if max_row[1] >= max_col[1] and max_row[0] is not None:
             return 'row', max_row[0]
-        elif max_col[0] is not None:
+        if max_col[0] is not None:
             return 'col', max_col[0]
         return None, None
 
@@ -710,7 +725,7 @@ class TransportTable:
             if self.__solution[-1][-1].repr == consumer_exp == supplier_epx:
                 self.__collapse_transport_matrix()
 
-    def __create_transition_matrix(self, matrix: npt.NDArray[Root]) -> List[Dict[str, int | float]]:
+    def __create_transition_matrix(self, matrix: npt.NDArray[Root]) -> list[dict[str, int | float]]:
         transition_roots = []
         for supplier_idx, line in enumerate(matrix):
             for consumer_idx, item in enumerate(line):
@@ -731,27 +746,26 @@ class TransportTable:
                 price += root.amount * root.price
         return price
 
-    def create_basic_plan(self, mode: int=1) -> tuple[List[Dict[str, int | float]], int | float]:
-        res = self.check_table_balance()
-        if not res:
-            self.__make_table_balanced()
+    def create_basic_plan(self, mode: int=1) -> tuple[list[dict[str, int | float]], int | float]:
+        if not self.check_table_balance():
+            self.__balance_table()
 
         if self.__restrictions:
-            for cell, restriction in self.__restrictions.items():
-                self.__put_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
+            for (supplier_id, consumer_id), (action, amount) in self.__restrictions.items():
+                self.__put_additional_restriction(supplier_id, consumer_id, action, amount)
 
         if mode == 1:
-            basic_plan = self.__north_western_method()
+            plan, cost = self.__north_western_method()
         elif mode == 2:
-            basic_plan = self.__minimum_cost_method()
+            plan, cost = self.__minimum_cost_method()
         else:
-            basic_plan = self.__vogel_method()
+            plan, cost = self.__vogel_method()
 
-        transition_matrix = self.__create_transition_matrix(basic_plan[0])
+        transition_matrix = self.__create_transition_matrix(plan)
         self.__restore_price_matrix_values()
-        return transition_matrix, basic_plan[1]
+        return transition_matrix, cost
 
-    def create_optimal_plan(self) -> Optional[tuple[List[Dict[str, int | float]], int | float]]:
+    def create_optimal_plan(self) -> Optional[tuple[list[dict[str, int | float]], int | float]]:
         self.__solution = np.zeros((self.__suppliers_amount, self.__consumers_amount), dtype=Root)
         for supplier_id in range(self.__suppliers_amount):
             for consumer_id in range(self.__consumers_amount):
@@ -770,14 +784,13 @@ class TransportTable:
                 self.__transportation_redistribution(loop, amount, epsilon)
             else:
                 break
-        for cell, restriction in self.__restrictions.items():
-            self.__remove_additional_restriction(cell[0], cell[1], restriction[0], restriction[1])
+        for (supplier_id, consumer_id), (action, amount) in self.__restrictions.items():
+            self.__remove_additional_restriction(supplier_id, consumer_id, action, amount)
 
         price = self.get_optimal_solution_price()
-        transition_matrix = self.__create_transition_matrix(self.__solution)
-        return transition_matrix, price
+        return self.__create_transition_matrix(self.__solution), price
 
-    def solve_capacity_plan(self) -> Optional[tuple[List[Dict[str, int | float]], int | float]]:
+    def solve_capacity_plan(self) -> Optional[tuple[list[dict[str, int | float]], int | float]]:
         self.__minimum_cost_method()
 
         if self.__check_balance_equations() is False:

@@ -52,7 +52,7 @@ def get_root_info(roots: set[SolutionRoot]) -> list[dict[str, int | float]]:
         base_root = root.root
         transition_root = {
             'supplier_id': base_root.supplier.line_id,
-            'consumer_id': base_root.supplier.line_id,
+            'consumer_id': base_root.consumer.line_id,
             'amount': root.amount,
             'epsilon': root.epsilon,
         }
@@ -60,6 +60,6 @@ def get_root_info(roots: set[SolutionRoot]) -> list[dict[str, int | float]]:
     return transition_roots
 
 
-def get_password_hash(password: str):
+def get_password_hash(password: str) -> str:
     password_bytes = password.encode('UTF-8')
     return hashlib.sha256(password_bytes).hexdigest()

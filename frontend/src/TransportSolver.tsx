@@ -233,6 +233,8 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
   const [notification, setNotification] = useState<string | null>(null);
   const [isNotificationVisible, setIsNotificationVisible] = useState(false);
   const [isLoadingTable, setIsLoadingTable] = useState(true);
+  const [isTableNameModalOpen, setIsTableNameModalOpen] = useState(false);
+  const [tempTableName, setTempTableName] = useState('');
 
   useEffect(() => {
     if (location.state?.tableData) {
@@ -240,29 +242,23 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       const table: FullTable = location.state.tableData;
       const { id, suppliers, consumers, price_matrix, restrictions: serverRestrictions, capacities } = table;
 
-      // Set table ID
       setTableId(id);
 
-      // Set rows and columns based on the table dimensions
       setRows(suppliers.length);
       setCols(consumers.length);
 
-
-      // Set suppliers and consumers
       setSuppliers(suppliers);
       setConsumers(consumers);
 
-      // Convert price_matrix to tableData format
       const newTableData = price_matrix.map((row, rowIndex) =>
         row.map((value, colIndex) => ({
           row: rowIndex,
           column: colIndex,
-          value: value ?? 0, // Ensure no null values
+          value: value ?? 0,
         }))
       );
       setTableData(newTableData);
 
-      // Parse restrictions from server format to component format
       const parsedRestrictions = Object.entries(serverRestrictions).map(([key, value]) => {
         const [row, col] = key.split(',').map(s => s.trim());
         const operator = value[0] as '>' | '<';
@@ -271,10 +267,8 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       });
       setRestrictions(parsedRestrictions);
 
-      // Set capacities (already in the correct format)
       setCapacities(capacities);
 
-      // Optional: Notify user that the table was loaded
       setNotification(`Loaded table: ${table.name}`);
     }
     else{
@@ -282,29 +276,25 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
     }
   }, [location.state]);
 
-  // Notification effect
   useEffect(() => {
     if (notification) {
       setIsNotificationVisible(true);
       const timer = setTimeout(() => {
         setIsNotificationVisible(false);
-        setNotification(null); // Clear notification after hiding
+        setNotification(null);
       }, 2700);
       return () => clearTimeout(timer);
     }
   }, [notification]);
 
-  // Capacity error check
   useEffect(() => {
     const errorMsg =
       capacities.length > 0 && capacities.length !== rows * cols
         ? 'All cells must have capacities when capacities are defined'
         : '';
     setCapacityError(errorMsg);
-    if (errorMsg) setNotification(errorMsg);
   }, [capacities, rows, cols]);
 
-  // Adjust data when rows/cols change
   useEffect(() => {
     if (isLoadingTable) return;
 
@@ -366,7 +356,6 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
     }, {} as Record<string, string>);
 
   const solvePlan = async (type: 'basic' | 'optimal') => {
-    // Validate table data
     const validationError = validateTableData(tableData, suppliers, consumers, rows, cols);
     if (validationError) {
       setNotification(validationError);
@@ -436,19 +425,42 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       let currentTableId = tableId;
 
       if (currentTableId === null) {
+        setIsTableNameModalOpen(true);
+        return ;
+      }
+      await saveSolutionDirectly(currentTableId);
+    } catch (error) {
+      console.error('Error saving solution:', error);
+      setNotification(`Error saving solution: ${error.message}`);
+    }
+  };
+
+  const handleTableNameSubmit = async () => {
+    if (!tempTableName.trim()) {
+      setNotification('Table name cannot be empty');
+      return;
+    }
+
+    setTableName(tempTableName);
+    setIsTableNameModalOpen(false);
+
+    try {
+      let currentTableId = tableId;
+
+      if (currentTableId === null) {
         const priceMatrix = Array.from({ length: rows }, (_, i) =>
           Array.from({ length: cols }, (_, j) => tableData[i]?.[j]?.value ?? 0)
         );
 
         const createTablePayload = {
-          user_id: userId,
-          rows: rows,
-          cols: cols,
-          price_matrix: priceMatrix,
+          id: tableId ? tableId : null,
+          name: tempTableName,
           suppliers: suppliers.map((s) => s || 0),
           consumers: consumers.map((c) => c || 0),
+          price_matrix: priceMatrix,
           restrictions: restrictions.length ? convertRestrictions(restrictions) : null,
           capacities: capacities.length ? capacities : null,
+          user_id: userId,
         };
 
         const createResponse = await fetch('http://127.0.0.1:8000/tables/create/', {
@@ -467,31 +479,35 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
         setTableId(currentTableId);
       }
 
-      const saveSolutionPayload = {
-        price: solutionData.price,
-        is_optimal: solutionData.is_optimal,
-        roots: solutionData.roots,
-      };
-
-      const saveResponse = await fetch(
-        `http://127.0.0.1:8000/tables/save_solution/${currentTableId}/?user_id=${userId}`,
-        {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(saveSolutionPayload),
-        }
-      );
-
-      if (!saveResponse.ok) {
-        const errorText = await saveResponse.text();
-        throw new Error(`Failed to save solution: ${errorText || 'Unknown error'}`);
-      }
-
-      setNotification('Solution saved successfully');
+      await saveSolutionDirectly(currentTableId);
     } catch (error) {
       console.error('Error saving solution:', error);
       setNotification(`Error saving solution: ${error.message}`);
     }
+  };
+
+  const saveSolutionDirectly = async (currentTableId: number) => {
+    const saveSolutionPayload = {
+      price: solutionData.price,
+      is_optimal: solutionData.is_optimal,
+      roots: solutionData.roots,
+    };
+
+    const saveResponse = await fetch(
+      `http://127.0.0.1:8000/tables/save_solution/${currentTableId}/?user_id=${userId}`,
+      {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(saveSolutionPayload),
+      }
+    );
+
+    if (!saveResponse.ok) {
+      const errorText = await saveResponse.text();
+      throw new Error(`Failed to save solution: ${errorText || 'Unknown error'}`);
+    }
+
+    setNotification('Solution saved successfully');
   };
 
   return (
@@ -707,6 +723,28 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
             <div className="modal-buttons">
               <button onClick={() => setIsModalOpen(false)}>Close</button>
               <button onClick={handleSaveSolution}>Save</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {isTableNameModalOpen && (
+        <div className="modal">
+          <div className="modal-content">
+            <h2>Save Transport Table</h2>
+            <div className="input-group">
+              <label htmlFor="table-name">Table Name</label>
+              <input
+                id="table-name"
+                type="text"
+                value={tempTableName}
+                onChange={(e) => setTempTableName(e.target.value)}
+                placeholder="Enter table name"
+              />
+            </div>
+            <div className="modal-buttons">
+              <button onClick={() => setIsTableNameModalOpen(false)}>Cancel</button>
+              <button onClick={handleTableNameSubmit}>Save</button>
             </div>
           </div>
         </div>

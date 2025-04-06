@@ -23,6 +23,7 @@ type TableData = {
   price_matrix: number[][];
   restrictions: Record<string, any>;
   capacities: number[][];
+  Ascending: true;
   user_id: number;
 };
 
@@ -72,7 +73,6 @@ const PreviousTables: React.FC<{ userId: string }> = ({ userId }) => {
         planType === 'basic'
           ? `http://127.0.0.1:8000/tables/last_basic_plan/${tableId}/?user_id=${userId}`
           : `http://127.0.0.1:8000/tables/last_optimal_plan/${tableId}/?user_id=${userId}`;
-      console.log(endpoint);
       const response = await fetch(endpoint);
       if (response.ok) {
         const data: SolutionData = await response.json();
@@ -122,21 +122,26 @@ const PreviousTables: React.FC<{ userId: string }> = ({ userId }) => {
       <ParticlesBackground />
       <div className="previous-tables">
         <h2>Previous Tables</h2>
-        <button onClick={() => navigate('/')}>Back to Main Page</button>
+        <button className="btnBack" onClick={() => navigate('/')}>Back to Main Page</button>
         <ul>
           {tables.map((table, index) => (
             <li key={index} className="table-item">
               <span className="table-counter">{index + 1}.</span>
               <span className="table-name">{table.name}</span>
-              <button onClick={() => viewPlan(table.id.toString(), 'basic')}>
-                View Basic Plan
-              </button>
-              <button onClick={() => viewPlan(table.id.toString(), 'optimal')}>
-                View Optimal Plan
-              </button>
-              <button onClick={() => navigate('/', { state: { tableData: table } })}>
-                Load Table
-              </button>
+              <span className="table-size">
+                Suppliers: {table.suppliers.length}, Consumers: {table.consumers.length}
+              </span>
+              <div className="table-actions">
+                <button onClick={() => viewPlan(table.id.toString(), 'basic')}>
+                  View Basic Plan
+                </button>
+                <button onClick={() => viewPlan(table.id.toString(), 'optimal')}>
+                  View Optimal Plan
+                </button>
+                <button onClick={() => navigate('/', { state: { tableData: table } })}>
+                  Load Table
+                </button>
+              </div>
             </li>
           ))}
         </ul>

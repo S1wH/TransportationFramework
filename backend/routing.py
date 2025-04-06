@@ -52,6 +52,7 @@ def save_solution(table_id: int, solution:Solution, user_id: int, db: Session = 
 
 @router.get('/last_basic_plan/{table_id}', status_code=status.HTTP_200_OK)
 def get_table_last_basic_plan(table_id: int, user_id: int,  db: Session = Depends(get_db)):
+    print(services.get_table_last_plan(db, table_id, user_id, is_optimal=False))
     return services.get_table_last_plan(db, table_id, user_id, is_optimal=False)
 
 
