@@ -17,6 +17,8 @@ class Solution(BaseModel):
     price: float | int
     is_optimal: bool
     roots: list[dict[str, int | float]]
+    suppliers: int
+    consumers: int
 
 
 class User(BaseModel):

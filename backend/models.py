@@ -92,6 +92,8 @@ class TableSolution(Base):
     id: Mapped[int] = mapped_column(primary_key=True, autoincrement=True, index=True)
     is_optimal: Mapped[bool] = mapped_column()
     price: Mapped[float] = mapped_column()
+    amount_suppliers: Mapped[int] = mapped_column()
+    amount_consumers: Mapped[int] = mapped_column()
 
     table_id: Mapped[int] = mapped_column(ForeignKey('transport_tables.id'))
     transport_table: Mapped['TransportTable'] = relationship(back_populates='solutions')

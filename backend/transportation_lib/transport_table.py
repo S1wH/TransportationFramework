@@ -761,6 +761,7 @@ class TransportTable:
         else:
             plan, cost = self.__vogel_method()
 
+        self.pprint_res(plan)
         transition_matrix = self.__create_transition_matrix(plan)
         self.__restore_price_matrix_values()
         return transition_matrix, cost
@@ -814,6 +815,14 @@ class TransportTable:
     @property
     def suppliers(self):
         return self.__suppliers
+
+    @property
+    def amount_suppliers(self):
+        return self.__suppliers_amount
+
+    @property
+    def amount_consumers(self):
+        return self.__consumers_amount
 
     @property
     def latest_basic_plan(self):

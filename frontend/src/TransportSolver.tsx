@@ -38,6 +38,8 @@ type SolutionResponse = {
   price: number;
   is_optimal: boolean;
   roots: Root[];
+  suppliers: number;
+  consumers: number;
 };
 
 interface TableComponentProps {
@@ -326,17 +328,39 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
     setTableData(newTableData);
     }, [rows, cols, isLoadingTable]);
 
-  const getSolutionGrid = (): (string | number)[][] => {
-    if (!solutionData?.roots) return Array(rows).fill(Array(cols).fill(0));
-    const grid = Array.from({ length: rows }, () => Array(cols).fill(0));
-    solutionData.roots.forEach((root) => {
-      const { supplier_id: supplierId, consumer_id: consumerId, amount, epsilon } = root;
-      grid[supplierId][consumerId] = epsilon
-        ? `${amount || ''}${epsilon > 0 ? '+' : '-'}${Math.abs(epsilon)}ε`
-        : amount;
-    });
-    return grid;
-  };
+    const getSolutionGrid = (): (string | number)[][] => {
+      if (!solutionData?.roots) return Array(solutionData?.suppliers || rows).fill(Array(solutionData?.consumers || cols).fill(0));
+      const grid = Array.from({ length: solutionData.suppliers }, () => Array(solutionData.consumers).fill(0));
+      solutionData.roots.forEach((root) => {
+        const { supplier_id: supplierId, consumer_id: consumerId, amount, epsilon } = root;
+        if (supplierId < solutionData.suppliers && consumerId < solutionData.consumers) {
+          grid[supplierId][consumerId] = epsilon
+            ? `${amount || ''}${epsilon > 0 ? '+' : '-'}${Math.abs(epsilon)}ε`
+            : amount;
+        }
+      });
+      return grid;
+    };
+
+    const getCellValue = (cell: string | number): number => {
+        if (typeof cell === 'number') return cell;
+        const match = cell.match(/^(\d+)?/);
+        return match && match[1] ? Number(match[1]) : 0;
+      };
+
+      const calculateSupplies = (grid: (string | number)[][]): number[] => {
+        return grid.map(row => row.reduce((sum, cell) => sum + getCellValue(cell), 0));
+      };
+
+      const calculateDemands = (grid: (string | number)[][]): number[] => {
+        const demands = Array(solutionData?.consumers || cols).fill(0);
+        grid.forEach(row => {
+          row.forEach((cell, colIndex) => {
+            demands[colIndex] += getCellValue(cell);
+          });
+        });
+        return demands;
+      };
 
   const updateCell = (row: number, col: number, value: number | null) => {
     const newValue = value !== null && value < 0 ? 0 : value;
@@ -689,13 +713,13 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
               <div className="solution-table-wrapper">
                 <div
                   className="solution-table-header"
-                  style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}
+                  style={{ gridTemplateColumns: `150px repeat(${solutionData.consumers}, minmax(80px, 1fr))` }}
                 >
                   <div className="corner-cell">Solution</div>
-                  {Array.from({ length: cols }, (_, i) => (
+                  {Array.from({ length: solutionData.consumers }, (_, i) => (
                     <div key={i} className="header-cell">
-                      <div>Consumer {i + 1}</div>
-                      <div className="demand-value">{consumers[i] || 0}</div>
+                      <div>{`Consumer ${i + 1}`}</div>
+                      <div className="demand-value">{calculateDemands(getSolutionGrid())[i]}</div>
                     </div>
                   ))}
                 </div>
@@ -705,11 +729,11 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
                     <div
                       key={rowIndex}
                       className="solution-table-row"
-                      style={{ gridTemplateColumns: `150px repeat(${cols}, minmax(80px, 1fr))` }}
+                      style={{ gridTemplateColumns: `150px repeat(${solutionData.consumers}, minmax(80px, 1fr))` }}
                     >
                       <div className="supplier-cell">
-                        <div>Supplier {rowIndex + 1}</div>
-                        <div className="supply-value">{suppliers[rowIndex] || 0}</div>
+                        <div>{`Supplier ${rowIndex + 1}`}</div>
+                        <div className="supply-value">{calculateSupplies(getSolutionGrid())[rowIndex]}</div>
                       </div>
                       {row.map((value, colIndex) => (
                         <div key={colIndex} className="solution-cell">{value}</div>

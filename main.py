@@ -3,7 +3,7 @@ import numpy as np
 
 
 t1 = TransportTable(
-    [1, 1, 1],
+    [1, 1, 2],
     [1, 1, 1],
     np.array([
         [1, 1, 1],
@@ -12,7 +12,7 @@ t1 = TransportTable(
     ], dtype=np.float16)
 )
 
-solution, price = t1.create_basic_plan(3)
+solution, price = t1.create_basic_plan(1)
 print('1', solution)
 
 # suppliers = [10, 20]  # Поставщики
