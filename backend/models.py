@@ -44,6 +44,7 @@ class Participant(Base):
     goods_amount: Mapped[float] = mapped_column()
     epsilon: Mapped[int] = mapped_column()
     is_supplier: Mapped[bool] = mapped_column(default=True)
+    is_dummy: Mapped[bool] = mapped_column(default=False)
 
     transport_table_id: Mapped[int] = mapped_column(ForeignKey('transport_tables.id'))
     transport_table: Mapped['TransportTable'] = relationship(back_populates='participants')

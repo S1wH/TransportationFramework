@@ -515,6 +515,8 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       price: solutionData.price,
       is_optimal: solutionData.is_optimal,
       roots: solutionData.roots,
+      suppliers: solutionData.suppliers,
+      consumers: solutionData.consumers
     };
 
     const saveResponse = await fetch(

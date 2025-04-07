@@ -162,16 +162,80 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
 
         solution_roots = []
         for root in table_solution.roots:
-            supplier_id = session.query(models.Participant).filter_by(
+            supplier_query = session.query(models.Participant).filter_by(
                 transport_table_id=table_id,
                 line_id=root['supplier_id'],
                 is_supplier=True,
-            ).one().id
-            consumer_id = session.query(models.Participant).filter_by(
+            )
+            consumer_query = session.query(models.Participant).filter_by(
                 transport_table_id=table_id,
                 line_id=root['consumer_id'],
                 is_supplier=False,
-            ).one().id
+            )
+            if supplier_query.count() == 0:
+                supplier = models.Participant(
+                    line_id=root['supplier_id'],
+                    goods_amount=root['amount'],
+                    epsilon=root['epsilon'],
+                    is_supplier=True,
+                    is_dummy=True,
+                    transport_table_id=table_id,
+                )
+                session.add(supplier)
+                session.commit()
+                session.refresh(supplier)
+                supplier_id = supplier.id
+
+                roots = []
+                for c_id in session.query(models.Participant.id).filter_by(transport_table_id=table_id,
+                                                                              is_supplier=False).distinct():
+                    session_root = models.Root(
+                        capacity=0,
+                        restriction=None,
+                        price=0,
+                        supplier_id=supplier_id,
+                        consumer_id=c_id[0],
+                        transport_table_id=table_id,
+                    )
+                    roots.append(session_root)
+                session.add_all(roots)
+                session.commit()
+
+            else:
+                supplier_id = supplier_query.one().id
+
+            if consumer_query.count() == 0:
+                consumer = models.Participant(
+                    line_id=root['consumer_id'],
+                    goods_amount=root['amount'],
+                    epsilon=root['epsilon'],
+                    is_supplier=False,
+                    is_dummy=True,
+                    transport_table_id=table_id,
+                )
+                session.add(consumer)
+                session.commit()
+                session.refresh(consumer)
+                consumer_id = consumer.id
+
+                roots = []
+                for s_id in session.query(models.Participant.id).filter_by(transport_table_id=table_id,
+                                                                              is_supplier=True).distinct():
+                    session_root = models.Root(
+                        capacity=0,
+                        restriction=None,
+                        price=0,
+                        supplier_id=s_id[0],
+                        consumer_id=consumer_id,
+                        transport_table_id=table_id,
+                    )
+                    roots.append(session_root)
+                session.add_all(roots)
+                session.commit()
+
+            else:
+                consumer_id = consumer_query.one().id
+            print(supplier_id, consumer_id, table_id)
             base_root = session.query(models.Root).filter_by(
                 supplier_id=supplier_id,
                 consumer_id=consumer_id,
