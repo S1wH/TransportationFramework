@@ -7,19 +7,27 @@ from backend import models, schemas, utils
 def get_tables(db: Session, user_id: int) -> list[schemas.TransportTable]:
     tables = []
     for table_id in db.query(models.TransportTable.id).distinct():
-        table_schema = get_table(db, table_id[0], user_id)
+        table_schema = get_table(db, table_id[0], user_id, is_dummy=False)
         tables.append(table_schema)
     return tables
 
 
-def get_table(db: Session, table_id: int | ColumnElement[int], user_id: int) -> Optional[schemas.TransportTable]:
+def get_table(db: Session, table_id: int | ColumnElement[int], user_id: int, is_dummy: Optional[bool]=False
+              ) -> Optional[schemas.TransportTable]:
     with db as session:
         table = session.get(models.TransportTable, table_id)
-        suppliers = session.query(models.Participant).filter_by(
-            transport_table_id=table_id, is_supplier=True).order_by('line_id')
-        consumers = session.query(models.Participant).filter_by(
-            transport_table_id=table_id, is_supplier=False).order_by('line_id')
-        roots = table.roots
+        suppliers = session.query(models.Participant.id, models.Participant.goods_amount).filter_by(
+            transport_table_id=table_id, is_supplier=True)
+        consumers = session.query(models.Participant.id, models.Participant.goods_amount).filter_by(
+            transport_table_id=table_id, is_supplier=False)
+
+        if is_dummy is not None:
+            suppliers = suppliers.filter_by(is_dummy=is_dummy).order_by('line_id')
+            consumers = consumers.filter_by(is_dummy=is_dummy).order_by('line_id')
+        roots = session.query(models.Root).filter_by(transport_table_id=table_id).filter(
+            models.Root.supplier_id.in_([s[0] for s in suppliers]),
+            models.Root.consumer_id.in_([c[0] for c in consumers])
+        )
         price_matrix = [[0 for _ in range(consumers.count())] for _ in range(suppliers.count())]
         capacities = [[0 for _ in range(consumers.count())] for _ in range(suppliers.count())
                       ] if list(roots)[0].capacity else []
@@ -37,8 +45,8 @@ def get_table(db: Session, table_id: int | ColumnElement[int], user_id: int) -> 
         table_scheme = schemas.TransportTable(
             id=table.id,
             name=table.name,
-            suppliers=[supplier.goods_amount for supplier in suppliers],
-            consumers=[consumer.goods_amount for consumer in consumers],
+            suppliers=[s[1] for s in suppliers],
+            consumers=[c[1] for c in consumers],
             price_matrix=price_matrix,
             restrictions=restrictions,
             capacities=capacities,
@@ -235,7 +243,6 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
 
             else:
                 consumer_id = consumer_query.one().id
-            print(supplier_id, consumer_id, table_id)
             base_root = session.query(models.Root).filter_by(
                 supplier_id=supplier_id,
                 consumer_id=consumer_id,
@@ -258,7 +265,7 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
 def get_table_last_plan(db: Session, table_id: int, user_id: int, is_optimal: bool
                         ) -> Optional[dict[str, schemas.Solution | schemas.TransportTable]]:
     with db as session:
-        table_schema = get_table(db, table_id, user_id)
+        table_schema = get_table(db, table_id, user_id, is_dummy=None)
 
         last_plan = session.query(models.TableSolution).filter_by(
             table_id=table_id, is_optimal=is_optimal
@@ -279,7 +286,6 @@ def get_table_last_plan(db: Session, table_id: int, user_id: int, is_optimal: bo
             'table': table_schema,
             'solution': last_plan
         }
-
         return output_data
 
 

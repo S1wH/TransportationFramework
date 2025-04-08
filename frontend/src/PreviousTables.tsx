@@ -15,6 +15,8 @@ type SolutionResponse = {
   price: number;
   is_optimal: boolean;
   roots: Root[];
+  suppliers: number;
+  consumers: number;
 };
 
 type TableData = {
@@ -96,24 +98,24 @@ const PreviousTables: React.FC<{ userId: string }> = ({ userId }) => {
 
   const getSolutionGrid = (): (string | number)[][] => {
     if (!solutionData?.solution.roots || !solutionData?.table) {
-      return Array(solutionData?.table.suppliers.length || 0).fill(
-        Array(solutionData?.table.consumers.length || 0).fill(0)
+      return Array(solutionData?.solution.suppliers || 0).fill(
+        Array(solutionData?.solution.consumers || 0).fill(0)
       );
     }
 
     const grid = Array.from(
-      { length: solutionData.table.suppliers.length },
-      () => Array(solutionData.table.consumers.length).fill(0)
+      { length: solutionData.solution.suppliers },
+      () => Array(solutionData.solution.consumers).fill(0)
     );
 
     solutionData.solution.roots.forEach((root) => {
-      const { supplier_id: supplierId, consumer_id: consumerId, amount, epsilon } = root;
-      if (supplierId < grid.length && consumerId < grid[0].length) {
-        grid[supplierId][consumerId] = epsilon
-          ? `${amount || ''}${epsilon > 0 ? '+' : '-'}${Math.abs(epsilon)}ε`
-          : amount;
-      }
-    });
+        const { supplier_id: supplierId, consumer_id: consumerId, amount, epsilon } = root;
+        if (supplierId < grid.length && consumerId < grid[0].length) {
+          grid[supplierId][consumerId] = epsilon
+            ? `${amount || ''}${epsilon > 0 ? '+' : '-'}${Math.abs(epsilon)}ε`
+            : amount;
+        }
+      });
     return grid;
   };
 
@@ -167,14 +169,16 @@ const PreviousTables: React.FC<{ userId: string }> = ({ userId }) => {
                 <div
                   className="solution-table-header"
                   style={{
-                    gridTemplateColumns: `150px repeat(${solutionData.table.consumers.length}, minmax(80px, 1fr))`,
+                    gridTemplateColumns: `150px repeat(${solutionData.solution.consumers}, minmax(80px, 1fr))`,
                   }}
                 >
                   <div className="corner-cell">Solution</div>
-                  {solutionData.table.consumers.map((demand, i) => (
+                  {Array.from({ length: solutionData.solution.consumers }, (_, i) => (
                     <div key={i} className="header-cell">
                       <div>Consumer {i + 1}</div>
-                      <div className="demand-value">{demand}</div>
+                      <div className="demand-value">
+                        {solutionData.table.consumers[i] ?? 'N/A'}
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -185,12 +189,14 @@ const PreviousTables: React.FC<{ userId: string }> = ({ userId }) => {
                       key={rowIndex}
                       className="solution-table-row"
                       style={{
-                        gridTemplateColumns: `150px repeat(${solutionData.table.consumers.length}, minmax(80px, 1fr))`,
+                        gridTemplateColumns: `150px repeat(${solutionData.solution.consumers}, minmax(80px, 1fr))`,
                       }}
                     >
                       <div className="supplier-cell">
                         <div>Supplier {rowIndex + 1}</div>
-                        <div className="supply-value">{solutionData.table.suppliers[rowIndex]}</div>
+                        <div className="supply-value">
+                          {solutionData.table.suppliers[rowIndex] ?? 'N/A'}
+                        </div>
                       </div>
                       {row.map((value, colIndex) => (
                         <div key={colIndex} className="solution-cell">{value}</div>

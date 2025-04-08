@@ -894,5 +894,6 @@ h1 {
 
 .btnBack {
   margin: 0 auto;
+  min-width: 200px;
   max-width: 30%
 }

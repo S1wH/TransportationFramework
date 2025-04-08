@@ -18,7 +18,7 @@ def get_tables(user_id: int, db: Session = Depends(get_db)) -> list[TransportTab
 
 @router.get('/{table_id}', status_code=status.HTTP_200_OK)
 def get_table(table_id: int, user_id: int, db: Session = Depends(get_db)) -> TransportTable:
-    return services.get_table(db, table_id, user_id)
+    return services.get_table(db, table_id, user_id, is_dummy=False)
 
 
 @router.post('/create', status_code=status.HTTP_201_CREATED)
