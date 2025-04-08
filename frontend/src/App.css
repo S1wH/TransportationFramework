@@ -1,0 +1,899 @@
+:root {
+  --primary: #8a59ff;
+  --primary-hover: #6d3cff;
+  --background: #1a1a1a;
+  --text: #e0e0e0;
+  --text-secondary: #999;
+  --border: #333;
+  --input-bg: #2d2d2d;
+  --card-bg: #252525;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Oxygen, Ubuntu, Cantarell, 'Open Sans', 'Helvetica Neue', sans-serif;
+  line-height: 1.5;
+  background: var(--background);
+  color: var(--text);
+  margin: 0;
+  min-height: 100vh;
+  overflow-y: hidden;
+}
+
+.app {
+  max-width: 1200px;
+  margin: 0 auto;
+  position: relative;
+  z-index: 1;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+header {
+  margin-bottom: 1rem;
+  text-align: center;
+}
+
+h1 {
+  color: var(--primary);
+  font-weight: 600;
+  margin-bottom: 1rem;
+  padding-top: 0.5rem;
+}
+
+.controls-container {
+  display: flex;
+  flex-direction: row;
+  gap: 3rem;
+  margin-top: 1rem;
+  margin-bottom: 1rem;
+  justify-content: center;
+  padding: 0 1rem;
+  flex: 0 0 auto;
+}
+
+@media (max-width: 768px) {
+  .controls-container {
+    flex-direction: column;
+    padding: 0;
+  }
+}
+
+.input-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  background: var(--input-bg);
+  border-radius: 6px;
+  padding: 1rem;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+  min-width: 120px;
+}
+
+.input-group label {
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.input-group input {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--card-bg);
+  color: var(--text);
+  transition: all 0.3s ease;
+}
+
+.input-group input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.table-container {
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+  box-shadow: inset -10px 0 10px -10px rgba(0, 0, 0, 0.5);
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.transport-table-wrapper {
+  margin: 0 auto;
+  width: fit-content;
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.2);
+  max-height: none;
+  height: 100%;
+  overflow-y: auto;
+}
+
+.table-header {
+  display: grid;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+  border-bottom: 2px solid var(--border);
+}
+
+.header-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 80px;
+  justify-content: center;
+  align-items: center;
+}
+
+.supplier-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  min-width: 100px;
+  width: 150px;
+  justify-content: center;
+  align-items: center;
+  position: sticky;
+  left: 0;
+  background: var(--card-bg);
+  z-index: 1;
+}
+
+.demand-value {
+  color: var(--text);
+  font-weight: 500;
+  padding: 0.5rem;
+  background: var(--input-bg);
+  border-radius: 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.header-cell input,
+.supplier-cell input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+  text-align: center;
+  transition: all 0.3s ease;
+}
+
+.header-cell input:focus,
+.supplier-cell input:focus {
+  outline: none;
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.table-body {
+  margin-top: 1rem;
+}
+
+.table-row {
+  display: grid;
+  gap: 1rem;
+  padding: 0.6rem 0.6rem;
+  border-bottom: 1px solid var(--border);
+}
+
+.table-cell {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.table-cell input {
+  width: 100%;
+  padding: 0.25rem;
+  font-size: 1rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text) !important;
+  box-sizing: border-box;
+}
+
+.table-cell:focus {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.restrictions,
+.capacities {
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  flex: 1;
+  min-width: 300px;
+  max-width: 400px;
+  max-height: 210px;
+  overflow-x: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.restrictions h3,
+.capacities h3 {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 1.25rem;
+  padding-top: 0.25rem;
+  margin-top: 0;
+}
+
+.controls-list {
+  margin: 1rem 0;
+  overflow-y: auto;
+  flex-grow: 1;
+}
+
+.restriction-item select,
+.restriction-item input,
+.capacity-item select,
+.capacity-item input {
+  width: 100%;
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+  transition: all 0.3s ease;
+  font-size: 0.9rem;
+}
+
+.restriction-item select:focus,
+.restriction-item input:focus,
+.capacity-item select:focus,
+.capacity-item input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.restriction-item {
+  display: grid;
+  grid-template-columns: 2fr 1fr 2fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.capacity-item {
+  display: grid;
+  grid-template-columns: 2fr 2fr auto;
+  gap: 0.75rem;
+  align-items: center;
+  margin-bottom: 0.75rem;
+}
+
+.delete-button {
+  background: #ff4757;
+  color: white;
+  border: none;
+  width: 30px;
+  height: 30px;
+  padding: 0;
+  border-radius: 50%;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.delete-button:hover {
+  background: #ff6b81;
+}
+
+.user-profile,
+.auth-buttons {
+  position: fixed;
+  right: 2rem;
+  top: 1.5rem;
+  z-index: 1200;
+}
+
+.profile-avatar {
+  width: 40px;
+  height: 40px;
+  background: #6b48ff;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: transform 0.2s;
+}
+
+.profile-avatar:hover {
+  transform: scale(1.1);
+}
+
+.profile-menu {
+  display: none;
+  position: absolute;
+  top: 100%;
+  right: 0;
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+  min-width: 150px;
+}
+
+.user-profile:hover .profile-menu {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.profile-menu button {
+  background: none;
+  color: var(--text);
+  padding: 0.5rem;
+  text-align: left;
+  border: none;
+}
+
+.profile-menu button:hover {
+  background: rgba(255,255,255,0.05);
+}
+
+.auth-buttons {
+  position: fixed;
+  right: 2rem;
+  top: 1.5rem;
+  z-index: 1200;
+  display: flex;
+  gap: 1rem;
+}
+
+.login-button,
+.register-button {
+  padding: 0.5rem 1rem;
+  background: #6b48ff;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.login-button:hover,
+.register-button:hover {
+  background: #5a3aff;
+}
+
+.back-button {
+  margin-top: 1rem;
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+  width: 100%;
+  font-weight: 500;
+}
+
+.back-button:hover {
+  background: var(--primary-hover);
+}
+
+.solve-button {
+  width: 100%;
+  max-width: 300px;
+  padding: 1rem;
+  font-size: 1.1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.solve-button:hover {
+  background: var(--primary-hover);
+}
+
+.solve-button:disabled {
+  background: var(--border);
+  cursor: not-allowed;
+}
+
+.capacity-error {
+  color: #ff4757;
+  text-align: center;
+  margin: 1rem 0;
+  font-weight: 500;
+}
+
+.add-button {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  font-weight: 500;
+  width: 100%;
+  margin-top: 0.5rem;
+}
+
+.add-button:hover {
+  background: var(--primary-hover);
+}
+
+.add-button:disabled {
+  background: var(--border);
+  cursor: not-allowed;
+}
+
+#particles-js {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+}
+
+.corner-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 0.5rem;
+  position: sticky;
+  left: 0;
+  background: var(--card-bg);
+  z-index: 3;
+  width: 150px;
+}
+
+.control {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.number-control {
+  display: flex;
+}
+
+.number-control button,
+.number-control input {
+  height: 30px;
+  border: 1px solid var(--border);
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 0.875rem;
+}
+
+.number-control button {
+  width: 30px;
+  cursor: pointer;
+  border-radius: 0;
+}
+
+.number-control button:first-child {
+  border-top-left-radius: 4px;
+  border-bottom-left-radius: 4px;
+}
+
+.number-control button:last-child {
+  border-top-right-radius: 4px;
+  border-bottom-right-radius: 4px;
+}
+
+.number-control input {
+  width: 50px;
+  text-align: center;
+  border-left: none;
+  border-right: none;
+  background: var(--input-bg);
+}
+
+.number-control input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.number-control input::-webkit-outer-spin-button,
+.number-control input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.number-control input {
+  -moz-appearance: textfield;
+}
+
+.modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+}
+
+.modal-content {
+  background: var(--card-bg);
+  padding: 2rem;
+  border-radius: 8px;
+  width: 90%;
+  max-width: 1000px;
+  max-height: 90%;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  border: 1px solid var(--border);
+  color: var(--text);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.modal-content h2 {
+  color: var(--primary);
+  font-weight: 600;
+  font-size: 1.5rem;
+  margin-bottom: 1rem;
+}
+
+.solution-table {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.solution-table-wrapper {
+  margin: 0 auto;
+  width: fit-content;
+  background: var(--card-bg);
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  position: relative;
+}
+
+.solution-table-container {
+  overflow-x: auto;
+  padding-bottom: 1rem;
+  display: flex;
+  justify-content: center;
+  box-shadow: inset -10px 0 10px -10px rgba(0, 0, 0, 0.5);
+  flex: 1;
+  max-height: 470px;
+  overflow-y: auto;
+}
+
+.solution-table-header {
+  display: grid;
+  gap: 1rem;
+  padding: 0 1rem 1rem;
+  padding-left: 160px;
+  border-bottom: 2px solid var(--border);
+  position: sticky;
+  top: 0;
+  background: var(--card-bg);
+  z-index: 2;
+}
+
+.solution-row {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.supply-value {
+  color: var(--text);
+  font-weight: 500;
+  padding: 0.5rem;
+  background: var(--input-bg);
+  border-radius: 4px;
+  text-align: center;
+  width: 100%;
+}
+
+.solution-cell {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+  min-width: 50px;
+  text-align: center;
+  font-size: 0.9rem;
+}
+
+.modal-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 1rem;
+  margin-top: 1.5rem;
+}
+
+.modal-buttons button {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  font-weight: 500;
+}
+
+.modal-buttons button:hover {
+  background: var(--primary-hover);
+}
+
+.method-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+  justify-content: center;
+  flex: 0 0 auto;
+}
+
+.method-select label {
+  color: var(--text-secondary);
+  font-weight: 500;
+}
+
+.method-select select {
+  padding: 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+  font-size: 1rem;
+}
+
+.method-select select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(138, 89, 255, 0.2);
+}
+
+.buttons-container {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  margin-top: 1rem;
+  flex: 0 0 auto;
+}
+
+.solution-info {
+  margin-bottom: 1rem;
+}
+
+.solution-info p {
+  margin: 0.5rem 0;
+  font-weight: 500;
+  color: var(--text-secondary);
+}
+
+.solution-table-row {
+  display: grid;
+  gap: 1rem;
+  padding: 1rem;
+  padding-left: 160px;
+  border-bottom: 1px solid var(--border);
+  position: relative;
+}
+
+.auth-container {
+  max-width: 400px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+}
+
+.auth-container h2 {
+  color: var(--primary);
+  text-align: center;
+  margin-bottom: 1.5rem;
+}
+
+.auth-container form {
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.auth-container input {
+  padding: 0.75rem;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--input-bg);
+  color: var(--text);
+}
+
+.auth-container button {
+  padding: 0.75rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.auth-container button:hover {
+  background: var(--primary-hover);
+}
+
+.error {
+  color: #ff4757;
+  text-align: center;
+}
+
+.notification {
+  position: fixed;
+  top: 20px;
+  right: 20px;
+  padding: 15px 25px;
+  background-color: #ff4444;
+  color: white;
+  border-radius: 5px;
+  z-index: 1000;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  transform: translateX(100%); /* Initial state: off-screen */
+  opacity: 0; /* Initial state: invisible */
+}
+
+.slide-in {
+  animation: slideIn 0.5s ease-in-out forwards;
+}
+
+.slide-out {
+  animation: slideOut 0.5s ease-in-out forwards;
+}
+
+/* Remove the :not pseudo-class as animations will handle the states */
+@keyframes slideIn {
+  from {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(100%);
+    opacity: 0;
+  }
+}
+
+
+.table-item {
+  display: grid;
+  gap: 0.5rem;
+  grid-template-columns: minmax(40px, auto) minmax(150px, auto) minmax(200px, auto) auto;
+  align-items: center;
+  padding: 1rem;
+  border-bottom: 1px solid var(--border);
+  transition: background 0.2s ease;
+}
+
+.table-item:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.table-info {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.table-counter {
+  font-weight: 500;
+  text-align: left;
+}
+
+.table-name {
+  font-weight: 500;
+  text-align: left;
+}
+
+.table-size {
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  text-align: left;
+}
+
+.table-actions button:hover {
+  background: var(--primary-hover);
+}
+
+.table-actions button {
+  padding: 0.5rem 1rem;
+  margin: 0.5rem 0.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+}
+
+.table-actions button:hover {
+  background: var(--primary-hover);
+}
+
+.previous-tables {
+  max-width: 1000px;
+  margin: 2rem auto;
+  padding: 2rem;
+  background: var(--card-bg);
+  border-radius: 8px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.previous-tables h2 {
+  color: var(--primary);
+  margin-bottom: 0.5rem;
+  text-align: center;
+}
+
+.previous-tables ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.previous-tables > button {
+  padding: 0.75rem 1.5rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.2s ease;
+  width: 100%;
+  margin-top: 1rem;
+  font-weight: 500;
+}
+
+.previous-tables > button:hover {
+  background: var(--primary-hover);
+}
+
+.btnBack {
+  margin: 0 auto;
+  min-width: 200px;
+  max-width: 30%
+}

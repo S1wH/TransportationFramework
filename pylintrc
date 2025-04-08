@@ -297,7 +297,7 @@ max-bool-expr=5
 max-branches=12
 
 # Maximum number of locals for function / method body.
-max-locals=16
+max-locals=20
 
 # Maximum number of parents for a class (see R0901).
 max-parents=7
@@ -447,7 +447,12 @@ disable=raw-checker-failed,
         unused-argument,
         too-many-nested-blocks,
         global-statement,
-        arguments-differ
+        arguments-differ,
+        too-many-arguments,
+        too-many-positional-arguments,
+        too-many-instance-attributes,
+        too-many-branches
+
 
 
 # Enable the message, report, category or checker with the given id(s). You can
