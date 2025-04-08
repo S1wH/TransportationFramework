@@ -1,9 +1,9 @@
 import copy
-import numpy as np
-import numpy.typing as npt
+from abc import ABC
 from collections import deque
 from typing import Optional
-from abc import ABC
+import numpy as np
+import numpy.typing as npt
 from prettytable import PrettyTable
 from .transport_errors import (InvalidMatrixDimension, InvalidPriceValueError, InvalidAmountGood,
                                InvalidRestrictionValue, InvalidRestrictionIndices, InvalidRestrictionSymbol,

@@ -120,13 +120,25 @@ def create_basic_plan(db: Session, table_id: int, mode: int) -> schemas.Solution
     t = utils.get_transport_table_info(db, table)
 
     roots, price = t.create_basic_plan(mode)
-    return schemas.Solution(price=price, is_optimal=False, roots=roots, suppliers=t.amount_suppliers, consumers=t.amount_consumers)
+    return schemas.Solution(
+        price=price,
+        is_optimal=False,
+        roots=roots,
+        suppliers=t.amount_suppliers,
+        consumers=t.amount_consumers
+    )
 
 
 def create_basic_plan_unauthorized(table: schemas.TransportTable, mode: int) -> schemas.Solution:
     t = utils.get_transport_table_info_unauthorized(table)
     roots, price = t.create_basic_plan(mode)
-    return schemas.Solution(price=price, is_optimal=False, roots=roots, suppliers=t.amount_suppliers, consumers=t.amount_consumers)
+    return schemas.Solution(
+        price=price,
+        is_optimal=False,
+        roots=roots,
+        suppliers=t.amount_suppliers,
+        consumers=t.amount_consumers
+    )
 
 
 def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Solution:
@@ -138,7 +150,13 @@ def create_optimal_plan(db: Session, table_id: int, mode: int) -> schemas.Soluti
     else:
         t.create_basic_plan(mode)
         roots, price = t.create_optimal_plan()
-    return schemas.Solution(price=price, is_optimal=True, roots=roots, suppliers=t.amount_suppliers, consumers=t.amount_consumers)
+    return schemas.Solution(
+        price=price,
+        is_optimal=True,
+        roots=roots,
+        suppliers=t.amount_suppliers,
+        consumers=t.amount_consumers
+    )
 
 
 def create_optimal_plan_unauthorized(table: schemas.TransportTable, mode: int) -> schemas.Solution:
@@ -148,13 +166,18 @@ def create_optimal_plan_unauthorized(table: schemas.TransportTable, mode: int) -
     else:
         t.create_basic_plan(mode)
         roots, price = t.create_optimal_plan()
-    return schemas.Solution(price=price, is_optimal=True, roots=roots, suppliers=t.amount_suppliers, consumers=t.amount_consumers)
+    return schemas.Solution(
+        price=price,
+        is_optimal=True,
+        roots=roots,
+        suppliers=t.amount_suppliers,
+        consumers=t.amount_consumers
+    )
 
 
 def save_solution(db: Session, table_id: int, user_id: int, table_solution: schemas.Solution) -> Optional[int]:
     with db as session:
-        user = session.get(models.User, user_id)
-        if not user:
+        if not session.get(models.User, user_id):
             return None
 
         solution = models.TableSolution(
@@ -243,6 +266,7 @@ def save_solution(db: Session, table_id: int, user_id: int, table_solution: sche
 
             else:
                 consumer_id = consumer_query.one().id
+
             base_root = session.query(models.Root).filter_by(
                 supplier_id=supplier_id,
                 consumer_id=consumer_id,
