@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import ParticlesBackground from './ParticlesBackground';
 import { FullTable } from './types';
@@ -237,6 +237,7 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
   const [isLoadingTable, setIsLoadingTable] = useState(true);
   const [isTableNameModalOpen, setIsTableNameModalOpen] = useState(false);
   const [tempTableName, setTempTableName] = useState('');
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     if (location.state?.tableData) {
@@ -536,6 +537,166 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
     setNotification('Solution saved successfully');
   };
 
+    const handleLoadFromJson = async (file: File) => {
+      const formData = new FormData();
+      formData.append('file', file);
+
+      try {
+        setIsLoadingTable(true);
+        const response = await fetch('http://127.0.0.1:8000/tables/load_from_json/', {
+          method: 'POST',
+          body: formData,
+        });
+
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to load JSON: ${errorText || 'Unknown error'}`);
+        }
+
+        const table: FullTable = await response.json();
+
+        const { id, name, suppliers, consumers, price_matrix, restrictions: serverRestrictions, capacities } = table;
+
+        setTableId(id);
+        setTableName(name);
+
+        setRows(suppliers.length);
+        setCols(consumers.length);
+
+        setSuppliers(suppliers);
+        setConsumers(consumers);
+
+        const newTableData = price_matrix.map((row, rowIndex) =>
+          row.map((value, colIndex) => ({
+            row: rowIndex,
+            column: colIndex,
+            value: value ?? 0,
+          }))
+        );
+        setTableData(newTableData);
+
+        const parsedRestrictions = serverRestrictions
+          ? Object.entries(serverRestrictions).map(([key, value]) => {
+              const [row, col] = key.split(',').map((s) => s.trim());
+              const operator = value[0] as '>' | '<';
+              const val = Number(value.slice(1));
+              return { cell: `${row}-${col}`, operator, value: val };
+            })
+          : [];
+        setRestrictions(parsedRestrictions);
+
+        const parsedCapacities = capacities
+          ? capacities
+              .flatMap((row, rowIndex) =>
+                row.map((value, colIndex) =>
+                  value !== null && value !== undefined && value !== 0
+                    ? { cell: `${rowIndex}-${colIndex}`, value }
+                    : null
+                )
+              )
+              .filter((cap): cap is Capacity => cap !== null)
+          : [];
+        setCapacities(parsedCapacities);
+
+        setNotification(`Loaded table${name ? `: ${name}` : ''}`);
+      } catch (error) {
+        console.error('Load JSON error:', error);
+        setNotification(`Error loading JSON: ${error.message}`);
+      } finally {
+        setIsLoadingTable(false);
+        if (fileInputRef.current) {
+          fileInputRef.current.value = '';
+        }
+      }
+      };
+
+      const triggerFileInput = () => {
+        fileInputRef.current?.click();
+    };
+
+    const handleDownloadJson = async () => {
+      try {
+        // Prepare price_matrix from tableData
+        const priceMatrix = tableData.map(row => row.map(cell => cell.value ?? 0));
+
+        // Convert restrictions to the required dictionary format
+        const restrictionsDict = convertRestrictions(restrictions);
+
+        // Prepare capacities as a 2D list
+        const capacitiesMatrix = Array.from({ length: rows }, () => Array(cols).fill(0));
+        capacities.forEach(cap => {
+          const [row, col] = cap.cell.split('-').map(Number);
+          if (row < rows && col < cols) {
+            capacitiesMatrix[row][col] = cap.value;
+          }
+        });
+
+        // Construct the table object per TransportTable schema
+        const table = {
+          id:  null,
+          name: tableName || null,
+          suppliers: suppliers.map(s => s || 0),
+          consumers: consumers.map(c => c || 0),
+          price_matrix: priceMatrix,
+          restrictions: restrictions.length ? restrictionsDict : null,
+          capacities: capacities.length ? capacitiesMatrix : null,
+          user_id: null,
+        };
+
+        // Construct the solution object per Solution schema
+        const solution = {
+          price: solutionData.price,
+          is_optimal: solutionData.is_optimal,
+          roots: solutionData.roots.map(root => ({
+            supplier_id: root.supplier_id,
+            consumer_id: root.consumer_id,
+            amount: root.amount,
+            epsilon: root.epsilon,
+          })),
+          suppliers: solutionData.suppliers,
+          consumers: solutionData.consumers,
+        };
+
+        // Prepare the payload
+        const payload = {
+          table,
+          solution,
+        };
+
+        // Send POST request to /save_to_json
+        const response = await fetch('http://127.0.0.1:8000/tables/save_to_json/', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify(payload),
+        });
+
+        // Check if the request was successful
+        if (!response.ok) {
+          const errorText = await response.text();
+          throw new Error(`Failed to generate JSON: ${errorText || 'Unknown error'}`);
+        }
+
+        // Get the response as a blob and trigger download
+        const blob = await response.blob();
+        const url = window.URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.style.display = 'none';
+        a.href = url;
+        a.download = tableName ? `${tableName}_solution.json` : 'transport_solution.json';
+        document.body.appendChild(a);
+        a.click();
+        window.URL.revokeObjectURL(url);
+        a.remove();
+
+        setNotification('JSON downloaded successfully');
+      } catch (error) {
+        console.error('Download JSON error:', error);
+        setNotification(`Error downloading JSON: ${error.message}`);
+      }
+    };
+
   return (
     <div className="app dark-theme">
       <ParticlesBackground />
@@ -608,6 +769,21 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
                   <button onClick={() => setCols(cols + 1)}>+</button>
                 </div>
               </div>
+              <button className="add-button" onClick={triggerFileInput} style={{ marginTop: '0.5rem' }}>
+                Load from JSON
+              </button>
+              <input
+                type="file"
+                ref={fileInputRef}
+                accept=".json"
+                style={{ display: 'none' }}
+                onChange={(e) => {
+                  const file = e.target.files?.[0];
+                  if (file) {
+                    handleLoadFromJson(file);
+                  }
+                }}
+              />
             </div>
             {Array.from({ length: cols }, (_, i) => (
               <div key={i} className="header-cell">
@@ -749,6 +925,7 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
             <div className="modal-buttons">
               <button onClick={() => setIsModalOpen(false)}>Close</button>
               <button onClick={handleSaveSolution}>Save</button>
+              <button onClick={handleDownloadJson}>Save to JSON</button>
             </div>
           </div>
         </div>

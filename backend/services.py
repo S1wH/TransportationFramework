@@ -331,3 +331,38 @@ def user_login(db: Session, user: schemas.User) -> int | Mapped[int]:
         password_to_verify = utils.get_password_hash(user.password)
         user = session.query(models.User).filter_by(username=user.username, password=password_to_verify).first()
         return user.id
+
+
+def load_from_json(file_content: bytes) -> Optional[schemas.TransportTable]:
+    json_content = utils.load_from_json(file_content)
+    return schemas.TransportTable(
+        id=None,
+        name=json_content.get('table_name', None),
+        suppliers=json_content['suppliers'],
+        consumers=json_content['consumers'],
+        price_matrix=json_content['price_matrix'],
+        restrictions=json_content.get('restrictions', None),
+        capacities=json_content.get('capacities', None),
+        user_id=None,
+    )
+
+
+def save_to_json(table: schemas.TransportTable, solution: schemas.Solution) -> str:
+    json_data = {
+        'table': {
+            'name': table.name,
+            'suppliers': table.suppliers,
+            'consumers': table.consumers,
+            'price_matrix': table.price_matrix,
+            'restrictions': table.restrictions,
+            'capacities': table.capacities,
+        },
+        'solution': {
+            'price': solution.price,
+            'is_optimal': solution.is_optimal,
+            'roots': solution.roots,
+            'suppliers': solution.suppliers,
+            'consumers': solution.consumers,
+        }
+    }
+    return utils.save_to_json(json_data)

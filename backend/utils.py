@@ -1,10 +1,14 @@
 import hashlib
+import json
+import os
+from datetime import datetime
 from typing import Type
 from sqlalchemy.orm import Session
 import numpy as np
 from backend import models, schemas
 from backend.models import SolutionRoot
 from backend.transportation_lib.transport_table import TransportTable
+from backend.config import SOLUTIONS_DIR
 
 
 def get_transport_table_info(db: Session, table: Type[models.TransportTable]) -> TransportTable:
@@ -63,3 +67,28 @@ def get_root_info(roots: set[SolutionRoot]) -> list[dict[str, int | float]]:
 def get_password_hash(password: str) -> str:
     password_bytes = password.encode('UTF-8')
     return hashlib.sha256(password_bytes).hexdigest()
+
+
+def load_from_json(file_content: bytes) -> dict[str, list[int | float] | list[list[int | float]] | dict[str, str]]:
+    json_content = json.loads(file_content)
+    TransportTable(
+        json_content['suppliers'],
+        json_content['consumers'],
+        json_content['price_matrix'],
+        json_content.get('restrictions', None),
+        json_content.get('capacities', None),
+    )
+    return json_content
+
+
+def save_to_json(json_data: dict[str, dict[str, list[int | float] | list[list[int | float]] | dict[str, str]]]) -> str:
+    table_name = json_data.get('table').get('name', 'UnnamedTable')
+    if not table_name:
+        table_name = 'UnnamedTable'
+    json_file_path = os.path.join(SOLUTIONS_DIR,
+                                  f"{table_name}_solution_{datetime.now().strftime('%d-%m-%Y_%H:%M:%S')}.json")
+    json_data = json.dumps(json_data, indent=4)
+
+    with open(json_file_path, 'w', encoding='utf-8') as f:
+        f.write(json_data)
+    return json_file_path

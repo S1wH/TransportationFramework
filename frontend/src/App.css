@@ -465,6 +465,11 @@ h1 {
   width: 150px;
 }
 
+.corner-cell .add-button {
+  margin-top: 0.5rem;
+  width: 100%;
+}
+
 .control {
   display: flex;
   flex-direction: column;

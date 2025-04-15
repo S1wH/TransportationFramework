@@ -214,7 +214,7 @@ class TransportTable:
                 raise InvalidCapacityValue(row_sum, self.suppliers[idx].goods_amount, idx + 1, 0)
         for idx, column_sum in enumerate(column_sums):
             if column_sum < self.consumers[idx]:
-                raise InvalidCapacityValue(column_sum, self.suppliers[idx].goods_amount, idx + 1, 0)
+                raise InvalidCapacityValue(column_sum, self.consumers[idx].goods_amount, idx + 1, 1)
 
     def __validate_table(self) -> None:
         for supplier_id, supplier in enumerate(self.suppliers):
@@ -761,7 +761,6 @@ class TransportTable:
         else:
             plan, cost = self.__vogel_method()
 
-        self.pprint_res(plan)
         transition_matrix = self.__create_transition_matrix(plan)
         self.__restore_price_matrix_values()
         return transition_matrix, cost
