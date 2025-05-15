@@ -199,14 +199,14 @@ const validateTableData = (
       }
     }
   }
-
-  for (let i = 0; i < cols; i++) {
+    console.log(cols);
+  for (let i = 0; i < rows; i++) {
     if (suppliers[i] <= 0 || suppliers[i] === undefined) {
       return `Supplier ${i + 1} must have a value greater than 0`;
     }
   }
 
-  for (let i = 0; i < rows; i++) {
+  for (let i = 0; i < cols; i++) {
     if (consumers[i] <= 0 || consumers[i] === undefined) {
       return `Consumer ${i + 1} must have a value greater than 0`;
     }
@@ -397,6 +397,16 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       Array.from({ length: cols }, (_, j) => tableData[i][j].value)
     );
 
+    const capacitiesMatrix = Array.from({ length: rows }, () => Array(cols).fill(0));
+      if (capacities.length > 0) {
+        capacities.forEach(cap => {
+          const [row, col] = cap.cell.split('-').map(Number);
+          if (row < rows && col < cols) {
+            capacitiesMatrix[row][col] = cap.value;
+          }
+        });
+    }
+
     const payload = {
       id: tableId ? tableId : null,
       name: tableName ? tableName : null,
@@ -404,7 +414,7 @@ const TransportSolver: React.FC<TransportSolverProps> = ({ userId, onLogout }) =
       consumers,
       price_matrix: priceMatrix,
       restrictions: restrictions.length ? convertRestrictions(restrictions) : null,
-      capacities: capacities.length ? capacities : null,
+      capacities: capacities.length ? capacitiesMatrix : null,
       ...(type === 'basic' && { method }),
       ...(userId && { user_id: userId }),
       user_id: userId,
